@@ -1,5 +1,3 @@
-import type { OverlayNoticeViewModel } from "@/lib/overlayNotice";
-
 export const OVERLAY_WIDTH = 200;
 export const OVERLAY_HEIGHT = 40;
 export const BASE_HEIGHT = 32;
@@ -53,32 +51,6 @@ export function getEqualSpaceGap(capsuleWidth: number, waveformWidth = WAVEFORM_
 export function getWaveformLeftOffset(capsuleWidth: number, waveformWidth = WAVEFORM_BAR_STRIP_WIDTH) {
   const gap = getEqualSpaceGap(capsuleWidth, waveformWidth);
   return gap * 2 + ICON_SIZE;
-}
-
-export function getOverlayStageSize(
-  layoutMode: "capsule" | "spinner" | "notice",
-  notice: OverlayNoticeViewModel | null,
-) {
-  const capsuleExpandedWidth = getCapsuleExpandedWidth();
-  const stageWidth =
-    layoutMode === "spinner"
-      ? OVERLAY_WIDTH
-      : notice
-        ? notice.kind === "manual_copy"
-          ? 272
-          : 224
-        : Math.max(CAPSULE_EXPANDED_WIDTH + OVERLAY_WINDOW_BUFFER_X * 2, capsuleExpandedWidth + OVERLAY_WINDOW_BUFFER_X * 2);
-
-  const stageHeight =
-    layoutMode === "spinner"
-      ? OVERLAY_HEIGHT
-      : notice
-        ? notice.kind === "manual_copy"
-          ? 136
-          : 96
-        : Math.max(OVERLAY_HEIGHT, BASE_HEIGHT + 8);
-
-  return { stageWidth, stageHeight, capsuleExpandedWidth };
 }
 
 export function getCapsuleAnimationWidth(progress: number) {

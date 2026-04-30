@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { Check, Globe2, Languages, Sparkles, Wand2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { cn } from "@/lib/utils";
 import type { AppLocale } from "@/lib/appLocale";
 import {
   ENGLISH_TRANSCRIPTION_PROMPT,
@@ -160,18 +161,18 @@ function OptionButton({
     <button
       type="button"
       onClick={onClick}
-      className={
+      className={cn(
+        "inline-flex items-center gap-2 rounded-2xl border px-4 py-2 text-sm",
         active
-          ? "inline-flex items-center gap-2 rounded-2xl border border-slate-950 bg-slate-950 px-4 py-2 text-sm font-semibold text-white shadow-[0_8px_24px_rgba(15,23,42,0.22)]"
-          : "inline-flex items-center gap-2 rounded-2xl border border-black/8 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:border-slate-300 hover:bg-slate-50"
-      }
+          ? "border-slate-950 bg-slate-950 font-semibold text-white shadow-[0_8px_24px_rgba(15,23,42,0.22)]"
+          : "border-black/8 bg-white font-medium text-slate-700 transition hover:border-slate-300 hover:bg-slate-50"
+      )}
     >
       <span
-        className={
-          active
-            ? "flex h-5 w-5 items-center justify-center rounded-full bg-white/16"
-            : "flex h-5 w-5 items-center justify-center rounded-full border border-slate-300 bg-white"
-        }
+        className={cn(
+          "flex h-5 w-5 items-center justify-center rounded-full",
+          active ? "bg-white/16" : "border border-slate-300 bg-white"
+        )}
       >
         {active ? <Check className="h-3.5 w-3.5" /> : null}
       </span>

@@ -4,8 +4,7 @@
   "description": "Capability for the main and overlay window",
   "windows": [
     "main",
-    "overlay",
-    "ai-post-conversion"
+    "overlay"
   ],
   "permissions": [
     "core:default",
@@ -13,7 +12,6 @@
     "core:window:allow-hide",
     "core:window:allow-close",
     "core:window:allow-minimize",
-    "core:window:allow-maximize",
     "core:window:allow-unmaximize",
     "core:window:allow-set-focus",
     "core:window:allow-is-visible",
@@ -31,7 +29,6 @@
     "core:tray:allow-set-menu",
     "core:menu:default",
     "core:menu:allow-new",
-    "core:menu:allow-popup",
     "opener:default",
     "global-shortcut:default",
     "global-shortcut:allow-register",

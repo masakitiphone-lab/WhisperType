@@ -19,7 +19,7 @@ export async function preprocessAudioBlobForTranscription(inputBlob: Blob): Prom
     const outputBlob = new Blob([new Uint8Array(processedBytes)], { type: "audio/webm" });
     void invoke("log_to_terminal", {
       msg: `[Recording Metrics] audio_preprocess_complete input_bytes=${inputBlob.size} output_bytes=${outputBlob.size} elapsed_ms=${Math.round((typeof performance !== "undefined" ? performance.now() : Date.now()) - preprocessStart)}`,
-    }).catch(() => undefined);
+    }).catch((err) => console.error("log_to_terminal failed:", err));
     return outputBlob;
   } catch (error) {
     console.warn("Failed to preprocess audio for transcription:", error);

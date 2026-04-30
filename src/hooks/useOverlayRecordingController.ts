@@ -205,25 +205,31 @@ export function useOverlayRecordingController() {
         const pasteResult = await invoke<string>("type_text", { text: `${combinedText} `, useClipboardPaste: true });
         await invoke("log_to_terminal", {
           msg: `[Paste Result] ${pasteResult}`,
-        }).catch(() => undefined);
+        }).catch((err) => console.error("log_to_terminal failed:", err));
       } catch (error) {
         await invoke("log_to_terminal", {
           msg: `[Paste Flush Error] ${error}`,
-        }).catch(() => undefined);
+        }).catch((err) => console.error("log_to_terminal failed:", err));
         throw error;
       } finally {
         pendingPasteTextRef.current = "";
       }
     };
 
+    const MAX_PENDING_PASTE_LENGTH = 5000;
+
     const queueTranscriptionPaste = (text: string) => {
       const normalizedText = text.trim();
       if (!normalizedText) {
         return;
       }
-      pendingPasteTextRef.current = pendingPasteTextRef.current
+      const nextText = pendingPasteTextRef.current
         ? `${pendingPasteTextRef.current} ${normalizedText}`
         : normalizedText;
+      pendingPasteTextRef.current =
+        nextText.length > MAX_PENDING_PASTE_LENGTH
+          ? nextText.slice(-MAX_PENDING_PASTE_LENGTH)
+          : nextText;
     };
 
     const processTranscriptionJob = async (recording: ActiveRecording) => {
@@ -237,7 +243,7 @@ export function useOverlayRecordingController() {
       pendingTranscriptionsRef.current += 1;
       uiSettingsRef.current = readAppSettings();
       if (stopSoundRef.current) stopSoundRef.current.volume = uiSettingsRef.current.soundVolume;
-      if (uiSettingsRef.current.playStopSound) void stopSoundRef.current?.play().catch(() => undefined);
+      if (uiSettingsRef.current.playStopSound) void stopSoundRef.current?.play().catch((err) => console.error("Stop sound play failed:", err));
       const activeStream = recording.stream;
       const activeAudioContext = recording.audioContext;
       const activeWaveformAnimation = recording.waveformAnimation;
@@ -292,26 +298,26 @@ export function useOverlayRecordingController() {
           activeWaveformAnimation,
           !isOverlayJobActive(),
         );
-        await invoke("finish_transcription").catch(() => undefined);
-        if (!currentRecordingRef.current && !isStartingRef.current && pendingTranscriptionsRef.current === 0) {
-          capturePhaseRef.current = "idle";
-        }
-        if (!currentRecordingRef.current && !isStartingRef.current && pendingTranscriptionsRef.current === 0 && pendingPasteTextRef.current.trim()) {
-          await flushPastedTranscriptions().catch((error) => {
-            console.error("Failed to flush pending transcription text:", error);
-          });
-        }
-        if (!keepOverlayVisible && !currentRecordingRef.current && !isStartingRef.current && pendingTranscriptionsRef.current === 0) {
-          updateState("idle");
-          updateCapsulePhase("idle");
-          setCapsuleMounted(false);
-          setSpinnerPhase("hidden");
-          setOverlayLayoutMode("capsule");
-          setIsOverlayVisible(false);
-          await invoke("hide_overlay_window").catch(() => undefined);
-          return;
-        }
-        scheduleOverlayHideIfIdle();
+      await invoke("finish_transcription").catch((err) => console.error("finish_transcription failed:", err));
+      if (!currentRecordingRef.current && !isStartingRef.current && pendingTranscriptionsRef.current === 0) {
+        capturePhaseRef.current = "idle";
+      }
+      if (!currentRecordingRef.current && !isStartingRef.current && pendingTranscriptionsRef.current === 0 && pendingPasteTextRef.current.trim()) {
+        await flushPastedTranscriptions().catch((error) => {
+          console.error("Failed to flush pending transcription text:", error);
+        });
+      }
+      if (!keepOverlayVisible && !currentRecordingRef.current && !isStartingRef.current && pendingTranscriptionsRef.current === 0) {
+        updateState("idle");
+        updateCapsulePhase("idle");
+        setCapsuleMounted(false);
+        setSpinnerPhase("hidden");
+        setOverlayLayoutMode("capsule");
+        setIsOverlayVisible(false);
+        await invoke("hide_overlay_window").catch((err) => console.error("hide_overlay_window failed:", err));
+        return;
+      }
+      scheduleOverlayHideIfIdle();
       }
     };
     const startRealRecording = async () => {
@@ -329,7 +335,7 @@ export function useOverlayRecordingController() {
       updateState("recording");
       setIsOverlayVisible(uiSettingsRef.current.showOverlay);
       if (uiSettingsRef.current.playStartSound) {
-        void startSoundRef.current?.play().catch(() => undefined);
+        void startSoundRef.current?.play().catch((err) => console.error("Start sound play failed:", err));
       }
       window.setTimeout(() => {
         if (stateRef.current === "recording") {
@@ -409,7 +415,7 @@ export function useOverlayRecordingController() {
       } catch (error) {
         console.error("Microphone start failed:", error);
         capturePhaseRef.current = "idle";
-        await invoke("finish_transcription");
+        await invoke("finish_transcription").catch((err) => console.error("finish_transcription failed:", err));
         isStartingRef.current = false;
         await showOverlayNotice({ kind: "error", code: "microphone_unavailable" } as OverlayNoticePayload);
       } finally {

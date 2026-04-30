@@ -29,11 +29,6 @@ function nowMs(): number {
   return typeof performance !== "undefined" ? performance.now() : Date.now();
 }
 
-async function logTranscriptionTiming(message: string, meta: Record<string, unknown>) {
-  void message;
-  void meta;
-}
-
 function setPrefetchCache(accessToken: string, context: TranscriptionContext) {
   cachedPrefetch = {
     accessToken,
@@ -83,17 +78,8 @@ function isTokenUsable(accessToken: string | null | undefined, skewSeconds = 60)
 async function getUsableAccessToken() {
   const authStart = nowMs();
   try {
-    const cacheLookupStart = nowMs();
     const cachedToken = await invoke<string | null>("get_cached_access_token");
-    await logTranscriptionTiming("cached_token_lookup_complete", {
-      elapsed_ms: Math.round(nowMs() - cacheLookupStart),
-      total_elapsed_ms: Math.round(nowMs() - authStart),
-      has_token: !!cachedToken,
-    });
     if (isTokenUsable(cachedToken)) {
-      await logTranscriptionTiming("access_token_cached_hit", {
-        elapsed_ms: Math.round(nowMs() - authStart),
-      });
       return cachedToken;
     }
   } catch {
@@ -105,14 +91,18 @@ async function getUsableAccessToken() {
   } = await supabase.auth.getSession();
 
   if (isTokenUsable(currentSession?.access_token)) {
-    await invoke("set_cached_access_token", { token: currentSession.access_token }).catch(() => undefined);
+    await invoke("set_cached_access_token", { token: currentSession.access_token }).catch((err) =>
+      console.error("Failed to cache access token:", err)
+    );
     return currentSession.access_token;
   }
 
   try {
     const { data, error } = await supabase.auth.refreshSession();
     if (!error && isTokenUsable(data.session?.access_token)) {
-      await invoke("set_cached_access_token", { token: data.session.access_token }).catch(() => undefined);
+      await invoke("set_cached_access_token", { token: data.session.access_token }).catch((err) =>
+        console.error("Failed to cache refreshed token:", err)
+      );
       return data.session.access_token;
     }
   } catch {
@@ -123,7 +113,9 @@ async function getUsableAccessToken() {
     data: { session: fallbackSession },
   } = await supabase.auth.getSession();
   if (isTokenUsable(fallbackSession?.access_token)) {
-    await invoke("set_cached_access_token", { token: fallbackSession.access_token }).catch(() => undefined);
+    await invoke("set_cached_access_token", { token: fallbackSession.access_token }).catch((err) =>
+      console.error("Failed to cache fallback token:", err)
+    );
     return fallbackSession.access_token;
   }
   return null;
@@ -167,17 +159,15 @@ export async function prefetchTranscriptionReadiness() {
 
 
 async function invokeTranscriptionRequest(formData: FormData, accessToken: string): Promise<TranscriptionResponse> {
+  const controller = new AbortController();
+  const timeoutId = window.setTimeout(() => controller.abort(), TRANSCRIPTION_REQUEST_TIMEOUT_MS);
   const headers = {
     Authorization: `Bearer ${accessToken}`,
     "x-whispertype-timings": JSON.stringify({
-      hotkey_down_at_ms:
-        (globalThis as typeof globalThis & { __whispertype_hotkey_down_at_ms?: number }).__whispertype_hotkey_down_at_ms ?? null,
-      hotkey_up_at_ms:
-        (globalThis as typeof globalThis & { __whispertype_hotkey_up_at_ms?: number }).__whispertype_hotkey_up_at_ms ?? null,
-      recording_stopped_at_ms:
-        (globalThis as typeof globalThis & { __whispertype_recording_stopped_at_ms?: number }).__whispertype_recording_stopped_at_ms ?? null,
-      overlay_event_at_ms:
-        (globalThis as typeof globalThis & { __whispertype_overlay_event_at_ms?: number }).__whispertype_overlay_event_at_ms ?? null,
+      hotkey_down_at_ms: globalThis.__whispertype_hotkey_down_at_ms ?? null,
+      hotkey_up_at_ms: globalThis.__whispertype_hotkey_up_at_ms ?? null,
+      recording_stopped_at_ms: globalThis.__whispertype_recording_stopped_at_ms ?? null,
+      overlay_event_at_ms: globalThis.__whispertype_overlay_event_at_ms ?? null,
     }),
   };
   const request = TRANSCRIBE_URL
@@ -185,9 +175,22 @@ async function invokeTranscriptionRequest(formData: FormData, accessToken: strin
         method: "POST",
         headers,
         body: formData,
+        signal: controller.signal,
       }).then(async (response) => {
         const text = await response.text();
         if (!response.ok) {
+          let responseError: string | null = null;
+          try {
+            const parsed = JSON.parse(text) as { error?: unknown };
+            if (typeof parsed.error === "string" && parsed.error) {
+              responseError = parsed.error;
+            }
+          } catch {
+            // fall back to the raw response body below
+          }
+          if (responseError) {
+            throw new Error(responseError);
+          }
           throw new Error(`HTTP ${response.status}: ${text || "empty_body"}`);
         }
         try {
@@ -205,11 +208,18 @@ async function invokeTranscriptionRequest(formData: FormData, accessToken: strin
         }
         return data as TranscriptionResponse;
       });
-  const timeout = new Promise<never>((_, reject) => {
-    window.setTimeout(() => reject(new Error("transcription_timeout")), TRANSCRIPTION_REQUEST_TIMEOUT_MS);
-  });
 
-  const data = await Promise.race([request, timeout]) as TranscriptionResponse;
+  let data: TranscriptionResponse;
+  try {
+    data = await request;
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") {
+      throw new Error("transcription_timeout");
+    }
+    throw error;
+  } finally {
+    window.clearTimeout(timeoutId);
+  }
 
   if (!data?.text) {
     throw new Error("empty_transcription");
@@ -218,17 +228,13 @@ async function invokeTranscriptionRequest(formData: FormData, accessToken: strin
   return data;
 }
 
-async function persistTranscriptionResult(text: string) {
-  void text;
-}
-
 export async function transcribeAudio(audioBlob: Blob): Promise<string> {
   if (audioBlob.size === 0) {
     throw new Error("silent_audio");
   }
 
   const totalStart = nowMs();
-  (globalThis as typeof globalThis & { __whispertype_hotkey_down_at_ms?: number; __whispertype_hotkey_up_at_ms?: number; __whispertype_recording_stopped_at_ms?: number; __whispertype_overlay_event_at_ms?: number }).__whispertype_hotkey_up_at_ms ??= totalStart;
+  globalThis.__whispertype_hotkey_up_at_ms ??= totalStart;
   const processedBlob = await preprocessAudioBlobForTranscription(audioBlob);
   if (processedBlob.size === 0) {
     throw new Error("silent_audio");
@@ -250,6 +256,10 @@ export async function transcribeAudio(audioBlob: Blob): Promise<string> {
   }
 
   const accessToken = cachedPrefetchState.accessToken;
+  if (cachedPrefetchState.context.credits <= 0) {
+    cachedPrefetch = null;
+    throw new Error("insufficient_credits");
+  }
 
   const file = new File([processedBlob], getAudioFileName(processedBlob), {
     type: processedBlob.type || "audio/webm",
@@ -273,7 +283,6 @@ export async function transcribeAudio(audioBlob: Blob): Promise<string> {
     if (!text) {
       throw new Error("empty_transcription");
     }
-    void persistTranscriptionResult(text);
     return text;
   } catch (error) {
     const errorCode = error instanceof Error ? error.message : "transcription_failed";
@@ -288,11 +297,10 @@ export async function transcribeAudio(audioBlob: Blob): Promise<string> {
       if (!retryText) {
         throw new Error("empty_transcription");
       }
-      void persistTranscriptionResult(retryText);
       return retryText;
     }
 
-    console.error(errorCode);
+    console.error("Transcription error:", errorCode);
     throw new Error(errorCode);
   }
 }

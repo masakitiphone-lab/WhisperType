@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useState } from "react";
+﻿import { useEffect, useState } from "react";
 import { desktopAuthRedirectUrl } from "@/lib/auth";
 import { readAppLocale, type AppLocale } from "@/lib/appLocale";
 
@@ -50,21 +50,17 @@ function getCallbackCopy(locale: AppLocale): CallbackCopy {
   };
 }
 
-function buildDesktopCallbackUrl(search: string) {
-  return `${desktopAuthRedirectUrl}${search || ""}`;
-}
-
 export default function AuthCallback() {
   const [state, setState] = useState<CallbackState>("redirecting");
   const [locale] = useState<AppLocale>(() => readAppLocale());
-  const copy = useMemo(() => getCallbackCopy(locale), [locale]);
+  const copy = getCallbackCopy(locale);
   const search = typeof window !== "undefined" ? window.location.search : "";
-  const desktopCallbackUrl = useMemo(() => buildDesktopCallbackUrl(search), [search]);
+  const desktopCallbackUrl = `${desktopAuthRedirectUrl}${search || ""}`;
 
   useEffect(() => {
     const params = new URLSearchParams(search);
-    const hasCode = Boolean(params.get("code"));
-    const hasError = Boolean(params.get("error") || params.get("error_description"));
+    const hasCode = params.has("code");
+    const hasError = params.has("error") || params.has("error_description");
 
     if (!hasCode && !hasError) {
       setState("error");

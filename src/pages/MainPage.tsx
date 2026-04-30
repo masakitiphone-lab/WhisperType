@@ -88,7 +88,7 @@ export default function MainPage({
   }, []);
 
   useEffect(() => {
-    void invoke<HotkeyBackendInfo>("get_hotkey_backend_info").then(setHotkeyBackendInfo).catch(() => undefined);
+    void invoke<HotkeyBackendInfo>("get_hotkey_backend_info").then(setHotkeyBackendInfo).catch((err) => console.error("get_hotkey_backend_info failed:", err));
   }, []);
 
   useEffect(() => {
@@ -153,7 +153,10 @@ export default function MainPage({
     );
 
     observedSections.forEach((section) => observer.observe(section));
-    return () => observer.disconnect();
+    return () => {
+      observer.disconnect();
+      sectionRefs.current = {};
+    };
   }, []);
 
 
@@ -179,20 +182,24 @@ export default function MainPage({
   const modelLabel = MODEL_OPTIONS.find((option) => option.value === settings.model)?.labels[appLocale] ?? settings.model;
   const shortcutLabel = hotkey;
 
-  const planMeta = {
-    free: {
-      title: appLocale === "ja" ? "フリー" : "Free",
-      price: appLocale === "ja" ? "¥0" : "$0",
-      features: appLocale === "ja" ? ["毎月 300 credits", "標準の書き起こし", "最近の履歴"] : ["300 credits per month", "Standard transcription", "Recent history"],
-      notes: appLocale === "ja" ? ["無料で試したい方向け", "credits は毎月更新されます"] : ["For getting started", "Credits reset each month"],
-    },
-    plus: {
-      title: "WhisperType Plus",
-      price: appLocale === "ja" ? "¥300" : "$3",
-      features: appLocale === "ja" ? ["無制限 credits", "高速書き起こし", "優先的な請求サポート"] : ["Unlimited credits", "Unlimited transcription", "Priority billing support"],
-      notes: appLocale === "ja" ? ["月額 300 円", "いつでも解約できます"] : ["Billed monthly", "Cancel anytime"],
-    },
-  } as const;
+  const planMeta = useMemo(
+    () =>
+      ({
+        free: {
+          title: appLocale === "ja" ? "フリー" : "Free",
+          price: appLocale === "ja" ? "¥0" : "$0",
+          features: appLocale === "ja" ? ["毎月 300 credits", "標準の書き起こし", "最近の履歴"] : ["300 credits per month", "Standard transcription", "Recent history"],
+          notes: appLocale === "ja" ? ["無料で試したい方向け", "credits は毎月更新されます"] : ["For getting started", "Credits reset each month"],
+        },
+        plus: {
+          title: "WhisperType Plus",
+          price: appLocale === "ja" ? "¥300" : "$3",
+          features: appLocale === "ja" ? ["無制限 credits", "高速書き起こし", "優先的な請求サポート"] : ["Unlimited credits", "Unlimited transcription", "Priority billing support"],
+          notes: appLocale === "ja" ? ["月額 300 円", "いつでも解約できます"] : ["Billed monthly", "Cancel anytime"],
+        },
+      }) as const,
+    [appLocale]
+  );
 
   const handleRedeemPromoCode = async () => {
     if (!promoCode.trim() || !user) return;
@@ -200,7 +207,9 @@ export default function MainPage({
     setPromoResult(null);
 
     try {
-      const { data } = await supabase.rpc("redeem_promo_code", { input_code: promoCode });
+      const { data, error: rpcError } = await supabase.rpc("redeem_promo_code", { input_code: promoCode });
+      if (rpcError) throw rpcError;
+
       const row = (Array.isArray(data) ? data[0] : data) as PromoRpcRow | null;
 
       if (row?.status === "redeemed") {
@@ -219,6 +228,13 @@ export default function MainPage({
           message: row?.message ?? (appLocale === "ja" ? "無効なコードです。" : "Invalid code."),
         });
       }
+    } catch (err) {
+      console.error("Redeem promo code failed:", err);
+      setPromoResult({
+        kind: "error",
+        title: appLocale === "ja" ? "エラー" : "Error",
+        message: appLocale === "ja" ? "コード適用中に問題が発生しました。" : "Something went while applying the code.",
+      });
     } finally {
       setIsRedeemingPromo(false);
     }
@@ -237,7 +253,14 @@ export default function MainPage({
 
   const sectionHeaderClass = "flex items-center gap-3";
   const sectionAccentClass = "h-1.5 w-20 overflow-hidden rounded-full bg-slate-100 dark:bg-white/10";
-  const sectionAccent = <div className={sectionAccentClass}><img src={waveformGradientImage} alt="" aria-hidden="true" className="h-full w-full object-cover" /></div>;
+  const sectionAccent = useMemo(
+    () => (
+      <div className={sectionAccentClass}>
+        <img src={waveformGradientImage} alt="" aria-hidden="true" className="h-full w-full object-cover" />
+      </div>
+    ),
+    []
+  );
   const historyLabel = appLocale === "ja" ? "履歴" : "History";
 
   const handleCopyHistory = async (item: RecentHistoryItem) => {
@@ -430,15 +453,17 @@ export default function MainPage({
 
               <div className={GLASS_PANEL + " p-4"}>
                 <div className="flex items-center justify-between">
-                  <span className="text-sm">{ui.overlayScale}</span>
+                  <label htmlFor="overlay-scale" className="text-sm">{ui.overlayScale}</label>
                   <span className="text-xs font-semibold">{settings.overlayScale.toFixed(2)}x</span>
                 </div>
                 <input
+                  id="overlay-scale"
                   type="range"
                   min="0.8"
                   max="2"
                   step="0.05"
                   value={settings.overlayScale}
+                  aria-label={ui.overlayScale}
                   onChange={(event) =>
                     setSettings((current) => ({
                       ...current,
@@ -452,9 +477,9 @@ export default function MainPage({
               <div className="grid gap-3 md:grid-cols-2">
                 {(["showOverlay", "showWaveform", "playStartSound", "playStopSound", "autoInsert"] as const).map((key) => (
                   <div key={key} className={GLASS_PANEL + " flex items-center justify-between px-4 py-3"}>
-                    <span className="text-sm text-slate-700 dark:text-slate-200">{(ui as Record<string, string>)[key]}</span>
+                    <span className="text-sm text-slate-700 dark:text-slate-200">{ui[key]}</span>
                     <Switch
-                      checked={Boolean((settings as Record<string, unknown>)[key])}
+                      checked={Boolean(settings[key])}
                       onClick={() =>
                         setSettings((current) => ({
                           ...current,

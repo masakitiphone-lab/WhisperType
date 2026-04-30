@@ -40,10 +40,6 @@ export function writeAppLocale(locale: AppLocale) {
   );
 }
 
-export function getAppLocaleLabel(locale: AppLocale) {
-  return APP_LOCALE_OPTIONS.find((option) => option.value === locale)?.label ?? "English";
-}
-
 export function getAppCopy(locale: AppLocale): Copy {
   return COPY[locale];
 }

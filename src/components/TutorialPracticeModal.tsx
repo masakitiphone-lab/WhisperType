@@ -168,13 +168,13 @@ export default function TutorialPracticeModal({
   const handleMicCheck = async () => {
     await invoke("log_to_terminal", {
       msg: `[Tutorial] mic_check_start selectedMicId=${selectedMicId || "default"}`,
-    }).catch(() => undefined);
+    }).catch((err) => console.error("log_to_terminal failed:", err));
     const stream = await requestPreferredAudioStream(selectedMicId || undefined);
     stream.getTracks().forEach((track) => track.stop());
     setMicChecked(true);
     await invoke("log_to_terminal", {
       msg: `[Tutorial] mic_check_complete selectedMicId=${selectedMicId || "default"}`,
-    }).catch(() => undefined);
+    }).catch((err) => console.error("log_to_terminal failed:", err));
   };
 
   const handleHotkeyChange = async (nextHotkey: string) => {
@@ -192,7 +192,7 @@ export default function TutorialPracticeModal({
     if (!micChecked) return;
     void invoke("log_to_terminal", {
       msg: `[Tutorial] mic_next selectedMicId=${selectedMicId || "default"}`,
-    }).catch(() => undefined);
+    }).catch((err) => console.error("log_to_terminal failed:", err));
     writeAppSettings({ preferredAudioInputDeviceId: selectedMicId });
     setStep("hotkey");
   };
@@ -200,7 +200,7 @@ export default function TutorialPracticeModal({
   const handleHotkeyNext = () => {
     void invoke("log_to_terminal", {
       msg: `[Tutorial] hotkey_next currentHotkey=${hotkey}`,
-    }).catch(() => undefined);
+    }).catch((err) => console.error("log_to_terminal failed:", err));
     setStep("practice");
   };
 
@@ -344,7 +344,7 @@ export default function TutorialPracticeModal({
                 onClick={() => {
                   void invoke("log_to_terminal", {
                     msg: `[Tutorial] complete text_len=${value.trim().length}`,
-                  }).catch(() => undefined);
+                  }).catch((err) => console.error("log_to_terminal failed:", err));
                   onComplete();
                 }}
                 disabled={value.trim().length === 0}

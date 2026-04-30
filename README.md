@@ -142,9 +142,9 @@ Frontend:
 - `src/lib/authStorage.ts`
 - `src/services/transcription.ts`
 - `src/pages/LoginPage.tsx`
+- `src/pages/MainPage.tsx`
 - `src/pages/OverlayPage.tsx`
-- `src/pages/SettingsPage.tsx`
-- `src/pages/PlanPage.tsx`
+- `src/pages/PlanCheckoutPage.tsx`
 - `src/components/OnboardingModal.tsx`
 - `src/components/WelcomeCreditsCelebration.tsx`
 
@@ -157,7 +157,7 @@ Desktop:
 - `src-tauri/tauri.conf.json`
 
 Backend:
-- `supabase/functions/transcribe/index.ts`
+- `cloudflare/transcribe-worker/src/index.ts`
 
 ## Build And Dev Commands
 

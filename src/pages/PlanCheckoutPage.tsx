@@ -1,4 +1,5 @@
-import { ChevronLeft, ShieldCheck } from "lucide-react";
+import { ChevronLeft, ShieldCheck, Loader2 } from "lucide-react";
+import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { AppShell } from "@/components/AppShell";
 import { StripeCheckoutPanel } from "@/components/StripeCheckoutPanel";
@@ -6,6 +7,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useAuth } from "@/contexts/useAuth";
 import type { AppLocale } from "@/lib/appLocale";
+import { getCheckoutProvider, type CheckoutProvider } from "@/lib/checkout";
+import { invoke } from "@tauri-apps/api/core";
 
 type PlanKey = "free" | "plus";
 
@@ -102,9 +105,39 @@ const COPY = {
 export default function PlanCheckoutPage({ appLocale }: { appLocale: AppLocale }) {
   const navigate = useNavigate();
   const location = useLocation();
-  const { profile } = useAuth();
+  const { profile, refreshProfile } = useAuth();
   const plan = ((location.state as { plan?: PlanKey } | null)?.plan ?? "plus") as PlanKey;
   const copy = COPY[appLocale];
+  const [checkoutProvider, setCheckoutProvider] = useState<CheckoutProvider | null>(null);
+  const [isPurchasing, setIsPurchasing] = useState(false);
+  const [purchaseError, setPurchaseError] = useState("");
+
+  useEffect(() => {
+    void getCheckoutProvider().then(setCheckoutProvider).catch(() => setCheckoutProvider("stripe"));
+  }, []);
+
+  const handleStorePurchase = async () => {
+    setIsPurchasing(true);
+    setPurchaseError("");
+    try {
+      const success = await invoke<boolean>("purchase_plus_via_store");
+      if (success) {
+        await refreshProfile();
+        navigate("/plan");
+      } else {
+        setPurchaseError(appLocale === "ja" ? "購入が完了しませんでした。" : "Purchase was not completed.");
+      }
+    } catch (err) {
+      console.error("Store purchase failed:", err);
+      setPurchaseError(
+        appLocale === "ja"
+          ? "ストアでの購入に失敗しました。"
+          : "Failed to purchase through the Store."
+      );
+    } finally {
+      setIsPurchasing(false);
+    }
+  };
 
   return (
     <AppShell
@@ -115,7 +148,7 @@ export default function PlanCheckoutPage({ appLocale }: { appLocale: AppLocale }
       headerActions={null}
     >
       <div className="space-y-6">
-        <Button type="button" variant="ghost" className="w-fit rounded-full px-3" onClick={() => navigate("/plan")}>
+        <Button type="button" variant="ghost" className="w-fit rounded-full px-3" onClick={() => navigate(-1)}>
           <ChevronLeft className="h-4 w-4" />
           {copy.back}
         </Button>
@@ -163,17 +196,44 @@ export default function PlanCheckoutPage({ appLocale }: { appLocale: AppLocale }
             </div>
 
             <div className="flex justify-center">
-              <div className="w-full max-w-[560px] space-y-4">
-                <div className="rounded-[24px] border border-black/8 bg-white/75 p-5 text-sm leading-6 text-slate-600 dark:border-white/8 dark:bg-white/5 dark:text-slate-300">
-                  <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
-                    <ShieldCheck className="h-4 w-4" />
-                    {copy.cardDetails}
+                <div className="w-full max-w-[560px] space-y-4">
+                  <div className="rounded-[24px] border border-black/8 bg-white/75 p-5 text-sm leading-6 text-slate-600 dark:border-white/8 dark:bg-white/5 dark:text-slate-300">
+                    <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
+                      <ShieldCheck className="h-4 w-4" />
+                      {checkoutProvider === "ms-store" ? "Microsoft Store" : copy.cardDetails}
+                    </div>
+                    <p className="mt-3">
+                      {checkoutProvider === "ms-store"
+                        ? appLocale === "ja"
+                          ? "Microsoft Store で Plus を購入します。"
+                          : "Purchase Plus through the Microsoft Store."
+                        : copy.cardDetailsBody}
+                    </p>
                   </div>
-                  <p className="mt-3">{copy.cardDetailsBody}</p>
-                </div>
 
-                <StripeCheckoutPanel plan={plan} appLocale={appLocale} />
-              </div>
+                  {checkoutProvider === null ? (
+                    <div className="flex items-center gap-3 text-slate-500 dark:text-slate-300">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      <p className="text-sm">Loading…</p>
+                    </div>
+                  ) : checkoutProvider === "ms-store" ? (
+                    <div className="space-y-3">
+                      <Button
+                        type="button"
+                        disabled={isPurchasing}
+                        onClick={handleStorePurchase}
+                        className="h-12 w-full rounded-2xl bg-black text-white hover:bg-black/90 dark:bg-white dark:text-black dark:hover:bg-white/90"
+                      >
+                        {isPurchasing ? "Processing…" : appLocale === "ja" ? "Store で購入" : "Buy in Store"}
+                      </Button>
+                      {purchaseError ? (
+                        <p className="text-xs text-rose-600 dark:text-rose-300">{purchaseError}</p>
+                      ) : null}
+                    </div>
+                  ) : (
+                    <StripeCheckoutPanel plan={plan} appLocale={appLocale} />
+                  )}
+                </div>
             </div>
           </CardContent>
         </Card>

@@ -95,31 +95,16 @@ function getLoginUiCopy(locale: AppLocale): LoginUiCopy {
   };
 }
 
-const AUTO_LOGIN_PREFERENCE_KEY = "whispertype.auto-login";
-
 export default function LoginPage({ appLocale }: { appLocale: AppLocale }) {
   const { user, signInWithGoogle, isLoading, authFlowStatus } = useAuth();
   const [isSigningIn, setIsSigningIn] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [rememberMe, setRememberMe] = useState(() => {
-    try {
-      const stored = window.localStorage.getItem(AUTO_LOGIN_PREFERENCE_KEY);
-      return stored !== "false";
-    } catch {
-      return true;
-    }
-  });
   const copy = getLoginUiCopy(appLocale);
 
   const handleGoogleSignIn = async () => {
     try {
       setError(null);
       setIsSigningIn(true);
-      try {
-        window.localStorage.setItem(AUTO_LOGIN_PREFERENCE_KEY, rememberMe ? "true" : "false");
-      } catch {
-        // ignore local preference storage failures
-      }
       await signInWithGoogle();
     } catch (err: unknown) {
       console.error("Sign in error:", err);
@@ -209,16 +194,6 @@ export default function LoginPage({ appLocale }: { appLocale: AppLocale }) {
                     {copy.browserHint}
                   </p>
                 </div>
-
-                <label className="flex items-center gap-2.5 px-1 text-sm text-slate-600 dark:text-slate-300">
-                  <input
-                    type="checkbox"
-                    checked={rememberMe}
-                    onChange={(event) => setRememberMe(event.target.checked)}
-                    className="h-4 w-4 rounded border-slate-300 text-black focus:ring-black"
-                  />
-                  <span>{copy.rememberMeLabel}</span>
-                </label>
 
                 <Button
                   onClick={handleGoogleSignIn}

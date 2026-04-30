@@ -39,7 +39,52 @@ export const MODEL_OPTIONS: Array<{ value: TranscriptionModel; labels: Record<Ap
   { value: "whisper-large-v3", labels: { en: "Full model", ja: "高精度モデル", es: "Modelo completo" } },
 ];
 
-export function getUiCopy(locale: AppLocale) {
+export type UiCopyKey =
+  | "interfaceTitle"
+  | "interfaceDescription"
+  | "transcriptionLanguage"
+  | "model"
+  | "promoTitle"
+  | "promoPlaceholder"
+  | "promoButton"
+  | "promoNote"
+  | "hotkeyTitle"
+  | "hotkeyDescription"
+  | "hotkeyIdleHint"
+  | "overlayTitle"
+  | "overlayDescription"
+  | "promptTitle"
+  | "promptDescription"
+  | "showOverlay"
+  | "showWaveform"
+  | "playStartSound"
+  | "playStopSound"
+  | "autoInsert"
+  | "useClipboardPaste"
+  | "soundVolume"
+  | "overlayScale"
+  | "backend"
+  | "worksWell"
+  | "stillLimited"
+  | "inputMonitoring"
+  | "nativeRuntime"
+  | "preflight"
+  | "requestPermission"
+  | "probeNative"
+  | "copyDiagnostics"
+  | "clearDiagnostics"
+  | "clearPrompt"
+  | "presetJapanese"
+  | "presetEnglish"
+  | "yes"
+  | "no"
+  | "checking"
+  | "requesting"
+  | "probing";
+
+export type UiCopy = Record<UiCopyKey, string>;
+
+export function getUiCopy(locale: AppLocale): UiCopy {
   if (locale === "ja") {
     return {
       interfaceTitle: "音声入力設定",

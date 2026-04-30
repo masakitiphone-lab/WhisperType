@@ -44,7 +44,7 @@ export function OverlayNoticePanel({ notice, reduceMotion, onClose, onOpenApp, o
   } as const;
 
   return (
-    <div style={shellStyle}>
+    <div style={shellStyle} role="alert" aria-live="polite">
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "6px" }}>
         <div style={{ display: "flex", flexDirection: "column", gap: "5px", flex: 1, minWidth: 0 }}>
           <div

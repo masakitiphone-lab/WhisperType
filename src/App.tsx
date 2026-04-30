@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
 import { Navigate, Route, Routes } from "react-router-dom";
 import OnboardingModal from "@/components/OnboardingModal";
 import TutorialPracticeModal from "@/components/TutorialPracticeModal";
@@ -23,7 +22,7 @@ type WelcomeCreditsRpcRow = {
 };
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
-  const { user, isLoading } = useAuth();
+  const { user, isLoading, session } = useAuth();
   const copy = getAppCopy(readAppLocale());
 
   if (isLoading) {
@@ -39,6 +38,11 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
     return <Navigate to="/login" replace />;
   }
 
+  const isSessionExpired = session?.expires_at ? session.expires_at * 1000 < Date.now() : false;
+  if (isSessionExpired) {
+    return <Navigate to="/login" replace />;
+  }
+
   return <>{children}</>;
 }
 
@@ -50,7 +54,6 @@ export default function App() {
   const [pendingPracticeOpen, setPendingPracticeOpen] = useState(false);
   const [welcomeCredits, setWelcomeCredits] = useState<number | null>(null);
   const welcomeCreditsCheckedRef = useRef<Set<string>>(new Set());
-  const suppressRecordingStartUntilRef = useRef(0);
 
   useEffect(() => {
     writeAppLocale(appLocale);
@@ -183,27 +186,6 @@ export default function App() {
     } catch (error) {
       console.warn("Failed to read saved shortcut during app bootstrap:", error);
     }
-  }, []);
-
-  useEffect(() => {
-    let unlistenOpened: (() => void) | undefined;
-    let unlistenClosed: (() => void) | undefined;
-    const setSuppressionWindow = () => {
-      const expiresAt = Date.now() + 1200;
-      suppressRecordingStartUntilRef.current = expiresAt;
-      (globalThis as typeof globalThis & { __whispertype_suppress_recording_start_until_ms?: number })
-        .__whispertype_suppress_recording_start_until_ms = expiresAt;
-    };
-
-    void (async () => {
-      unlistenOpened = await listen("ai-post-conversion-opened", setSuppressionWindow);
-      unlistenClosed = await listen("ai-post-conversion-closed", setSuppressionWindow);
-    })();
-
-    return () => {
-      unlistenOpened?.();
-      unlistenClosed?.();
-    };
   }, []);
 
   return (

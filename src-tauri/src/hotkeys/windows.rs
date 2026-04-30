@@ -165,14 +165,6 @@ fn stop_overlay_session(state: &Arc<HookSharedState>, reason: &str) {
     }
 }
 
-pub fn stop_active_recording_shortcut(reason: &str) {
-    let state = shared_state();
-    if state.active.load(Ordering::SeqCst) {
-        stop_overlay_session(&state, reason);
-    }
-    state.pressed_keys.lock().unwrap().clear();
-}
-
 unsafe extern "system" fn low_level_keyboard_proc(
     code: i32,
     w_param: WPARAM,

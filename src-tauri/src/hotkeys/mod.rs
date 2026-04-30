@@ -48,7 +48,7 @@ pub use self::macos_hotkey_backend::create_macos_hotkey_backend;
 mod windows_hook_backend;
 
 #[cfg(target_os = "windows")]
-pub use self::windows_hook_backend::{stop_active_recording_shortcut, WindowsHookHotkeyBackend};
+pub use self::windows_hook_backend::WindowsHookHotkeyBackend;
 
 #[cfg(test)]
 mod tests {

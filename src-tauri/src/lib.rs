@@ -2,14 +2,13 @@
 
 mod hotkeys;
 mod audio_processing;
-mod ai_post_conversion;
 mod shared;
 mod log_store;
-mod post_conversion;
 mod secure_storage;
 mod tray;
 mod text_input;
 mod windowing;
+mod ms_store;
 
 use tauri::{
     webview::Color,
@@ -26,12 +25,7 @@ use tauri_plugin_deep_link::DeepLinkExt;
 use text_input::type_text_internal;
 use log_store::append_log_line;
 use audio_processing::process_audio_with_ffmpeg;
-use ai_post_conversion::{
-    apply_post_conversion, close_post_conversion_popup, open_post_conversion_popup,
-    start_post_conversion_flow, start_post_conversion_flow_at,
-};
 use tray::setup_tray_clean;
-use post_conversion::start_post_conversion_detection;
 use windowing::{
     apply_overlay_visuals, configure_main_window_for_settings, position_window_bottom_center,
     resize_overlay_window, show_window_without_focus, OVERLAY_HEIGHT,
@@ -45,6 +39,7 @@ use shared::hotkey_events::{
 use std::sync::Mutex;
 #[cfg(target_os = "windows")]
 use std::process::Command;
+use ms_store::{check_plus_store_license, get_checkout_provider, purchase_plus_via_store};
 use secure_storage::{secure_storage_delete, secure_storage_get, secure_storage_set};
 
 #[derive(Clone, serde::Serialize)]
@@ -490,18 +485,16 @@ pub fn run() {
             type_text,
             log_to_terminal,
             process_audio_with_ffmpeg,
-            start_post_conversion_flow,
-            start_post_conversion_flow_at,
             consume_pending_deep_links,
             get_cached_access_token,
             set_cached_access_token,
             emit_transcription_finished,
-            open_post_conversion_popup,
-            close_post_conversion_popup,
-            apply_post_conversion,
             secure_storage_get,
             secure_storage_set,
             secure_storage_delete,
+            get_checkout_provider,
+            purchase_plus_via_store,
+            check_plus_store_license,
         ])
         .setup(move |app| {
             #[cfg(debug_assertions)]
@@ -548,9 +541,6 @@ pub fn run() {
             #[cfg(debug_assertions)]
             println!("[Startup] global shortcut: {}ms", shortcut_at.elapsed().as_millis());
 
-            start_post_conversion_detection(app.handle().clone());
-            #[cfg(debug_assertions)]
-            println!("[Startup] post-conversion hook initialized");
             ensure_windows_autostart().ok();
 
             #[cfg(debug_assertions)]

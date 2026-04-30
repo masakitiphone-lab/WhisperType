@@ -308,8 +308,7 @@ export function HotkeyRecorder({
         onKeyDown={handleKeyDown}
         onKeyUp={handleKeyUp}
         onBlur={handleBlur}
-        className="pointer-events-none absolute h-0 w-0 opacity-0"
-        aria-hidden="true"
+        className="sr-only"
       />
 
       <Button

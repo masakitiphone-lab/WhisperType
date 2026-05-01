@@ -53,20 +53,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const mapProfile = (data: {
+  type ProfileRow = {
     id: string;
     email: string;
     name: string | null;
     avatar_url: string | null;
     credits: number | null;
+    daily_credits: number | null;
     role: string | null;
     plan: string | null;
-  }): UserProfile => ({
+  };
+
+  const mapProfile = (data: ProfileRow): UserProfile => ({
     id: data.id,
     email: data.email,
     name: data.name ?? "User",
     avatarUrl: data.avatar_url ?? "",
     credits: data.credits ?? 0,
+    dailyCredits: data.daily_credits ?? 50,
+    availableCredits: data.plan === "plus" ? null : (data.credits ?? 0) + (data.daily_credits ?? 50),
     role: data.role ?? "user",
     plan: data.plan === "plus" ? "plus" : "free",
   });
@@ -81,21 +86,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     avatarUrl:
       typeof currentUser.user_metadata?.avatar_url === "string" ? currentUser.user_metadata.avatar_url : "",
     credits: 0,
+    dailyCredits: 50,
+    availableCredits: 50,
     role: "user",
     plan: "free",
   });
 
   const isProfileRow = (
     value: unknown,
-  ): value is {
-    id: string;
-    email: string;
-    name: string | null;
-    avatar_url: string | null;
-    credits: number | null;
-    role: string | null;
-    plan: string | null;
-  } => {
+  ): value is ProfileRow => {
     if (!value || typeof value !== "object") {
       return false;
     }
@@ -120,7 +119,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         "profiles select",
         supabase
           .from("profiles")
-          .select("id, email, name, avatar_url, credits, role, plan")
+          .select("id, email, name, avatar_url, credits, daily_credits, role, plan")
           .eq("id", currentUser.id)
           .maybeSingle(),
       );

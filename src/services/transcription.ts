@@ -11,6 +11,10 @@ type TranscriptionResponse = {
 type TranscriptionContext = {
   user_id: string;
   credits: number;
+  daily_credits: number;
+  available_credits: number | null;
+  plan: "free" | "plus";
+  is_unlimited: boolean;
 };
 
 const TRANSCRIPTION_REQUEST_TIMEOUT_MS = 15000;
@@ -128,15 +132,30 @@ async function getSessionUserId() {
 }
 
 async function getTranscriptionContext(userId: string): Promise<TranscriptionContext> {
-  const { data, error } = await supabase
-    .from("profiles")
-    .select("id, credits")
-    .eq("id", userId)
-    .single();
-  if (error || !data?.id) {
+  const { data, error } = await supabase.rpc("get_transcription_context");
+  const row = (Array.isArray(data) ? data[0] : data) as
+    | {
+        user_id: string;
+        credits: number | null;
+        daily_credits: number | null;
+        available_credits: number | null;
+        plan: string | null;
+        is_unlimited: boolean | null;
+      }
+    | null;
+
+  if (error || !row?.user_id || row.user_id !== userId) {
     throw new Error("profile_unavailable");
   }
-  return { user_id: data.id, credits: data.credits };
+
+  return {
+    user_id: row.user_id,
+    credits: row.credits ?? 0,
+    daily_credits: row.daily_credits ?? 50,
+    available_credits: row.available_credits,
+    plan: row.plan === "plus" ? "plus" : "free",
+    is_unlimited: Boolean(row.is_unlimited),
+  };
 }
 
 export async function prefetchTranscriptionReadiness() {
@@ -255,7 +274,7 @@ export async function transcribeAudio(audioBlob: Blob): Promise<string> {
   }
 
   const accessToken = cachedPrefetchState.accessToken;
-  if (cachedPrefetchState.context.credits <= 0) {
+  if (!cachedPrefetchState.context.is_unlimited && (cachedPrefetchState.context.available_credits ?? 0) <= 0) {
     cachedPrefetch = null;
     throw new Error("insufficient_credits");
   }

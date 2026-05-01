@@ -13,7 +13,7 @@ import { buildOverlayNotice, classifyOverlayError, type OverlayNoticePayload, ty
 import { prefetchTranscriptionReadiness, transcribeAudio } from "@/services/transcription";
 import { useRecordingSounds } from "@/hooks/useRecordingSounds";
 import { createDisplayWaveformLevels, createEmptyWaveformLevels, RECORDING_SPEECH_RAW_THRESHOLD, RECORDING_SPEECH_THRESHOLD, WAVEFORM_GAIN, WAVEFORM_SMOOTHING, type ActiveRecording, type CapsulePhase, type CapturePhase } from "@/hooks/overlayRecordingWaveform";
-import { BASE_HEIGHT, CAPSULE_COLLAPSE_DURATION, CAPSULE_BODY_WIDTH, CAPSULE_EXPAND_DURATION, CAPSULE_EXPANDED_WIDTH, OVERLAY_WINDOW_BUFFER_X, OVERLAY_HEIGHT, OVERLAY_WIDTH } from "@/lib/overlayLayout";
+import { BASE_HEIGHT, CAPSULE_COLLAPSE_DURATION, CAPSULE_CONTENT_WIDTH, CAPSULE_EXPAND_DURATION, OVERLAY_WINDOW_BUFFER_X, OVERLAY_HEIGHT, OVERLAY_WIDTH } from "@/lib/overlayLayout";
 
 export function useOverlayRecordingController() {
   const [recordingState, setState] = useState<"idle" | "recording" | "transcribing" | "finished">("idle");
@@ -42,6 +42,7 @@ export function useOverlayRecordingController() {
   const processedRecordingIdsRef = useRef<Set<number>>(new Set());
   const pendingTranscriptionsRef = useRef(0);
   const pendingPasteTextRef = useRef("");
+  const overlayNoticeRef = useRef<OverlayNoticeViewModel | null>(null);
   const stateRef = useRef(recordingState);
   const finishTimeoutRef = useRef<number | null>(null);
   const spinnerHideTimeoutRef = useRef<number | null>(null);
@@ -50,6 +51,7 @@ export function useOverlayRecordingController() {
   const uiSettingsRef = useRef(readAppSettings());
   const appLocaleRef = useRef<AppLocale>(readAppLocale());
   const shouldReduceMotion = !!useReducedMotion();
+  overlayNoticeRef.current = overlayNotice;
   const updateState = (nextState: typeof recordingState) => {
     stateRef.current = nextState;
     setState(nextState);
@@ -92,6 +94,9 @@ export function useOverlayRecordingController() {
     finishTimeoutRef.current = null;
     spinnerHideTimeoutRef.current = null;
     noticeDismissTimeoutRef.current = null;
+    setCapsuleMounted(false);
+    setSpinnerPhase("hidden");
+    updateCapsulePhase("idle");
     setOverlayNotice(buildOverlayNotice(appLocaleRef.current, payload));
     setOverlayLayoutMode("notice");
     updateState("idle");
@@ -111,17 +116,13 @@ export function useOverlayRecordingController() {
     overlayLayoutMode === "spinner" && capsuleMounted && capsulePhase === "idle"
       ? OVERLAY_WIDTH
       : overlayNotice
-        ? overlayNotice.kind === "manual_copy"
-          ? 272
-          : 224
-        : Math.max(CAPSULE_BODY_WIDTH + OVERLAY_WINDOW_BUFFER_X * 2, CAPSULE_EXPANDED_WIDTH + OVERLAY_WINDOW_BUFFER_X * 2);
+        ? overlayNotice.width
+        : CAPSULE_CONTENT_WIDTH + OVERLAY_WINDOW_BUFFER_X * 2;
   const stageHeight =
     overlayLayoutMode === "spinner"
       ? OVERLAY_HEIGHT
       : overlayNotice
-        ? overlayNotice.kind === "manual_copy"
-          ? 136
-          : 96
+        ? overlayNotice.minHeight
         : Math.max(OVERLAY_HEIGHT, BASE_HEIGHT + 8);
   useEffect(() => {
     const syncSettings = () => {
@@ -175,6 +176,9 @@ export function useOverlayRecordingController() {
     const scheduleOverlayHideIfIdle = () => {
       if (finishTimeoutRef.current) window.clearTimeout(finishTimeoutRef.current);
       if (spinnerHideTimeoutRef.current) window.clearTimeout(spinnerHideTimeoutRef.current);
+      if (overlayNoticeRef.current && !overlayNoticeRef.current.autoDismiss) {
+        return;
+      }
       if (isOverlayJobActive()) {
         return;
       }

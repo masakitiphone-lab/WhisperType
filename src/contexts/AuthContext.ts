@@ -7,6 +7,8 @@ export type UserProfile = {
   name: string;
   avatarUrl: string;
   credits: number;
+  dailyCredits: number;
+  availableCredits: number | null;
   role: string;
   plan: "free" | "plus";
 };

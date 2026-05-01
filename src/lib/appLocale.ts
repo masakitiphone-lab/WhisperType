@@ -2,11 +2,11 @@ import { COPY, type Copy } from "@/lib/appCopyData";
 
 export type AppLocale = "en" | "ja" | "es";
 
-export const DEFAULT_APP_LOCALE: AppLocale = "en";
+export const DEFAULT_APP_LOCALE: AppLocale = "ja";
 
 export const APP_LOCALE_OPTIONS: Array<{ value: AppLocale; label: string }> = [
-  { value: "en", label: "English" },
   { value: "ja", label: "日本語" },
+  { value: "en", label: "English" },
   { value: "es", label: "Español" },
 ];
 

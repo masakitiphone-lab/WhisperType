@@ -178,6 +178,27 @@ export default function MainPage({
   };
 
   const currentPlanLabel = profile?.plan === "plus" ? "Plus" : appLocale === "ja" ? "フリー" : "Free";
+  const currentPlan = profile?.plan === "plus" ? "plus" : "free";
+  const creditSummaryLabel =
+    currentPlan === "plus"
+      ? appLocale === "ja"
+        ? "無制限"
+        : "Unlimited"
+      : appLocale === "ja"
+        ? `今日 ${profile?.dailyCredits ?? 50} / 50`
+        : `${profile?.dailyCredits ?? 50} / 50 today`;
+  const creditSummaryNote =
+    currentPlan === "plus"
+      ? appLocale === "ja"
+        ? "文字起こしは無制限です"
+        : "Unlimited transcription"
+      : (profile?.credits ?? 0) > 0
+        ? appLocale === "ja"
+          ? `ボーナスクレジット ${profile?.credits ?? 0}`
+          : `Bonus credits ${profile?.credits ?? 0}`
+        : appLocale === "ja"
+          ? "毎日 50 クレジットを付与"
+          : "50 daily credits";
   const languageLabel = LANGUAGE_OPTIONS.find((option) => option.value === settings.language)?.labels[appLocale] ?? settings.language;
   const modelLabel = MODEL_OPTIONS.find((option) => option.value === settings.model)?.labels[appLocale] ?? settings.model;
   const shortcutLabel = hotkey;
@@ -188,13 +209,13 @@ export default function MainPage({
         free: {
           title: appLocale === "ja" ? "フリー" : "Free",
           price: appLocale === "ja" ? "¥0" : "$0",
-          features: appLocale === "ja" ? ["毎月 300 credits", "標準の書き起こし", "最近の履歴"] : ["300 credits per month", "Standard transcription", "Recent history"],
-          notes: appLocale === "ja" ? ["無料で試したい方向け", "credits は毎月更新されます"] : ["For getting started", "Credits reset each month"],
+          features: appLocale === "ja" ? ["毎日 50 クレジット", "標準の文字起こし", "最近の履歴"] : ["50 daily credits", "Standard transcription", "Recent history"],
+          notes: appLocale === "ja" ? ["毎日リセットされます", "まず試したい方向け"] : ["Resets every day", "Good for getting started"],
         },
         plus: {
           title: "WhisperType Plus",
           price: appLocale === "ja" ? "¥300" : "$3",
-          features: appLocale === "ja" ? ["無制限 credits", "高速書き起こし", "優先的な請求サポート"] : ["Unlimited credits", "Unlimited transcription", "Priority billing support"],
+          features: appLocale === "ja" ? ["文字起こし無制限", "高速書き起こし", "優先サポート"] : ["Unlimited transcription", "Faster transcription", "Priority support"],
           notes: appLocale === "ja" ? ["月額 300 円", "いつでも解約できます"] : ["Billed monthly", "Cancel anytime"],
         },
       }) as const,
@@ -340,10 +361,16 @@ export default function MainPage({
               </div>
             </div>
 
-            <div className="grid gap-3 md:grid-cols-3">
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
               <div className={GLASS_PANEL + " px-4 py-3"}>
                 <p className={sectionLabelClass}>Plan</p>
                 <p className={`mt-1 ${sectionValueClass}`}>{currentPlanLabel}</p>
+              </div>
+
+              <div className={GLASS_PANEL + " px-4 py-3"}>
+                <p className={sectionLabelClass}>{appLocale === "ja" ? "Credits" : "Credits"}</p>
+                <p className={`mt-1 ${sectionValueClass}`}>{creditSummaryLabel}</p>
+                <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{creditSummaryNote}</p>
               </div>
 
               <DropdownMenu>
@@ -526,6 +553,7 @@ export default function MainPage({
           sectionIconClass={sectionIconClass}
           sectionTitleClass={sectionTitleClass}
           planMeta={planMeta}
+          currentPlan={currentPlan}
           promoCode={promoCode}
           isRedeemingPromo={isRedeemingPromo}
           promoResult={promoResult}

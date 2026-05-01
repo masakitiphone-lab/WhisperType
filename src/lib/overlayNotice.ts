@@ -17,6 +17,9 @@ export type OverlayNoticeViewModel = {
   openLabel: string;
   closeLabel: string;
   copyLabel?: string;
+  width: number;
+  minHeight: number;
+  autoDismiss: boolean;
 };
 
 export function classifyOverlayError(errorMessage: string): OverlayNoticePayload {
@@ -35,7 +38,7 @@ export function classifyOverlayError(errorMessage: string): OverlayNoticePayload
 }
 
 export function buildOverlayNotice(locale: AppLocale, payload: OverlayNoticePayload): OverlayNoticeViewModel {
-  const openLabel = locale === "ja" ? "アプリを開く" : locale === "es" ? "Abrir app" : "Open app";
+  const openLabel = locale === "ja" ? "プランを見る" : locale === "es" ? "Ver plan" : "View plan";
   const closeLabel = locale === "ja" ? "閉じる" : locale === "es" ? "Cerrar" : "Close";
   const copyLabel = locale === "ja" ? "コピー" : locale === "es" ? "Copiar" : "Copy";
 
@@ -44,9 +47,9 @@ export function buildOverlayNotice(locale: AppLocale, payload: OverlayNoticePayl
     const isPasteTargetMissing = payload.code === "paste_target_not_selected";
 
     return locale === "ja"
-      ? {
-          kind: "manual_copy",
-          badgeLabel: "手動コピー",
+        ? {
+            kind: "manual_copy",
+            badgeLabel: "手動コピー",
           title: isPasteCommandFailure
             ? "貼り付けを完了できませんでした"
             : isPasteTargetMissing
@@ -57,11 +60,14 @@ export function buildOverlayNotice(locale: AppLocale, payload: OverlayNoticePayl
             : isPasteTargetMissing
               ? "現在の入力先が選択されていないため、自動貼り付けを完了できませんでした。入力欄を選んでから、下の文章を必要に応じて手動で貼り付けてください。"
               : "自動貼り付けを完了できませんでした。下の文章をコピーして手動で貼り付けてください。",
-          text: payload.text ?? "",
-          openLabel,
-          closeLabel,
-          copyLabel,
-        }
+            text: payload.text ?? "",
+            openLabel,
+            closeLabel,
+            copyLabel,
+            width: 336,
+            minHeight: 184,
+            autoDismiss: false,
+          }
       : locale === "es"
         ? {
             kind: "manual_copy",
@@ -80,6 +86,9 @@ export function buildOverlayNotice(locale: AppLocale, payload: OverlayNoticePayl
             openLabel,
             closeLabel,
             copyLabel,
+            width: 336,
+            minHeight: 184,
+            autoDismiss: false,
           }
         : {
             kind: "manual_copy",
@@ -98,6 +107,9 @@ export function buildOverlayNotice(locale: AppLocale, payload: OverlayNoticePayl
             openLabel,
             closeLabel,
             copyLabel,
+            width: 336,
+            minHeight: 184,
+            autoDismiss: false,
           };
   }
 
@@ -145,5 +157,8 @@ export function buildOverlayNotice(locale: AppLocale, payload: OverlayNoticePayl
     message: errorCopy[1],
     openLabel,
     closeLabel,
+    width: payload.code === "insufficient_credits" ? 336 : 300,
+    minHeight: payload.code === "insufficient_credits" ? 144 : 124,
+    autoDismiss: payload.code !== "insufficient_credits",
   };
 }

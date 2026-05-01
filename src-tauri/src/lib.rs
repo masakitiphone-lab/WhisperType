@@ -397,7 +397,9 @@ fn type_text(_app: AppHandle, text: String, use_clipboard_paste: bool) -> Result
 
 #[tauri::command]
 fn log_to_terminal(msg: String) {
-    append_log_line(&format!("[JS Log] {msg}"));
+    if cfg!(debug_assertions) {
+        append_log_line(&format!("[JS Log] {msg}"));
+    }
     let _ = msg;
 }
 

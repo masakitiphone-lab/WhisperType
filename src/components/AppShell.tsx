@@ -143,7 +143,7 @@ export function AppShell({
             className="mb-8 flex items-center gap-3 rounded-2xl px-2 py-1 text-left transition hover:bg-black/[0.035] dark:hover:bg-white/[0.04]"
           >
             <div className="relative flex h-11 w-11 items-center justify-center rounded-2xl border border-black/8 bg-white shadow-sm dark:border-white/10 dark:bg-[#17181b]">
-              <img src="/icon.ico" alt="WhisperType" className="h-8 w-8 rounded-xl object-cover" />
+              <img src="/app-icon.png" alt="WhisperType" className="h-8 w-8 rounded-xl object-cover" />
             </div>
             <div>
               <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">WhisperType</p>

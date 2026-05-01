@@ -22,6 +22,7 @@ type Props = {
   sectionIconClass: string;
   sectionTitleClass: string;
   planMeta: PlanMeta;
+  currentPlan: PlanKey;
   promoCode: string;
   isRedeemingPromo: boolean;
   promoResult: PromoResult;
@@ -39,6 +40,7 @@ export function MainPagePlanSection({
   sectionIconClass,
   sectionTitleClass,
   planMeta,
+  currentPlan,
   promoCode,
   isRedeemingPromo,
   promoResult,
@@ -48,6 +50,17 @@ export function MainPagePlanSection({
   onUpgradePlus,
   setSectionRef,
 }: Props) {
+  const planDescription =
+    appLocale === "ja"
+      ? {
+          free: "毎日 50 クレジットで試せる無料プラン",
+          plus: "文字起こし無制限の有料プラン",
+        }
+      : {
+          free: "Free plan with 50 daily credits",
+          plus: "Paid plan with unlimited transcription",
+        };
+
   return (
     <section ref={setSectionRef} id="plan" className="scroll-mt-8">
       <div className="mb-3">
@@ -60,19 +73,15 @@ export function MainPagePlanSection({
       <div className="grid gap-4 md:grid-cols-2">
         {(Object.keys(planMeta) as PlanKey[]).map((key) => {
           const plan = planMeta[key];
+          const isCurrentPlan = currentPlan === key;
+
           return (
             <Card key={key} className={GLASS_CARD}>
               <CardHeader className="pb-3">
                 <CardTitle className="text-lg font-semibold">{plan.title}</CardTitle>
                 <div className="mt-1 text-3xl font-semibold">{plan.price}</div>
                 <p className="mt-2 text-sm leading-6 text-slate-500 dark:text-slate-400">
-                  {key === "free"
-                    ? appLocale === "ja"
-                      ? "まず試したい方向け"
-                      : "For getting started"
-                    : appLocale === "ja"
-                      ? "毎日使う方向け"
-                      : "For daily use"}
+                  {planDescription[key]}
                 </p>
               </CardHeader>
               <CardContent className="space-y-4">
@@ -86,20 +95,33 @@ export function MainPagePlanSection({
                 </ul>
                 <ul className="space-y-1.5 rounded-[18px] border border-black/6 bg-white/55 p-4 text-xs leading-5 text-slate-500 dark:border-white/8 dark:bg-white/5 dark:text-slate-300">
                   {plan.notes.map((note) => (
-                    <li key={note}>• {note}</li>
+                    <li key={note}>- {note}</li>
                   ))}
                 </ul>
                 {key === "plus" ? (
                   <Button
                     type="button"
                     onClick={onUpgradePlus}
-                    className="w-full rounded-2xl bg-black text-white hover:bg-black/90 dark:bg-white dark:text-black dark:hover:bg-white/90"
+                    disabled={isCurrentPlan}
+                    className="w-full rounded-2xl bg-black text-white hover:bg-black/90 disabled:opacity-100 dark:bg-white dark:text-black dark:hover:bg-white/90"
                   >
-                    {appLocale === "ja" ? "Plus にアップグレード" : "Upgrade to Plus"}
+                    {isCurrentPlan
+                      ? appLocale === "ja"
+                        ? "現在のプラン"
+                        : "Current plan"
+                      : appLocale === "ja"
+                        ? "Plus にアップグレード"
+                        : "Upgrade to Plus"}
                   </Button>
                 ) : (
                   <Button type="button" variant="outline" className="w-full rounded-2xl" disabled>
-                    {appLocale === "ja" ? "現在のプラン" : "Current plan"}
+                    {isCurrentPlan
+                      ? appLocale === "ja"
+                        ? "現在のプラン"
+                        : "Current plan"
+                      : appLocale === "ja"
+                        ? "フリープラン"
+                        : "Free plan"}
                   </Button>
                 )}
               </CardContent>
@@ -117,7 +139,7 @@ export function MainPagePlanSection({
             <input
               value={promoCode}
               onChange={(event) => onPromoCodeChange(event.target.value)}
-              placeholder={appLocale === "ja" ? "コード" : "Code"}
+              placeholder={appLocale === "ja" ? "コードを入力" : "Code"}
               className="h-11 rounded-2xl border border-white/25 bg-white/75 px-4 text-sm text-slate-800 outline-none dark:border-white/10 dark:bg-white/6 dark:text-slate-100"
             />
             <Button

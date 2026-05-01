@@ -35,7 +35,7 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   model: "whisper-large-v3-turbo",
   prompt: "",
   overlayScale: 1,
-  appLocale: "en",
+  appLocale: "ja",
   showOverlay: true,
   showWaveform: true,
   playStartSound: true,

@@ -1,6 +1,6 @@
-﻿import { useEffect, useState } from "react";
-import { motion, AnimatePresence } from "motion/react";
-import { CheckCircle2, XCircle, Loader2, ArrowRight, X } from "lucide-react";
+import { useEffect, useState } from "react";
+import { motion } from "motion/react";
+import { CheckCircle2, XCircle, X, ExternalLink } from "lucide-react";
 import { desktopAuthRedirectUrl } from "@/lib/auth";
 import { readAppLocale, type AppLocale } from "@/lib/appLocale";
 
@@ -11,12 +11,10 @@ type CallbackCopy = {
   title: string;
   description: string;
   closeHint: string;
+  closeButton: string;
   retryLabel: string;
   errorTitle: string;
   errorDescription: string;
-  step1: string;
-  step2: string;
-  step3: string;
 };
 
 function getCallbackCopy(locale: AppLocale): CallbackCopy {
@@ -24,14 +22,12 @@ function getCallbackCopy(locale: AppLocale): CallbackCopy {
     return {
       eyebrow: "AUTHENTICATION",
       title: "ログインが完了しました",
-      description: "WhisperType に戻っています。このままアプリをご利用ください。",
-      closeHint: "このタブは自動で閉じます。閉じない場合は手動で閉じてください。",
+      description: "WhisperType に戻りました。アプリをそのままご利用ください。",
+      closeHint: "このタブはもう不要です。下のボタンで閉じるか、手動で閉じてください。",
+      closeButton: "このタブを閉じる",
       retryLabel: "アプリに戻る",
       errorTitle: "ログインを完了できませんでした",
       errorDescription: "アプリからもう一度ログインをお試しください。",
-      step1: "認証成功",
-      step2: "アプリに接続中",
-      step3: "完了",
     };
   }
 
@@ -39,39 +35,26 @@ function getCallbackCopy(locale: AppLocale): CallbackCopy {
     return {
       eyebrow: "AUTHENTICATION",
       title: "Inicio de sesion completado",
-      description: "WhisperType esta volviendo a la app. Continua alli.",
-      closeHint: "Esta pestana se cerrara automaticamente.",
+      description: "WhisperType ha vuelto a la app. Continua alli.",
+      closeHint: "Ya puedes cerrar esta pestana.",
+      closeButton: "Cerrar esta pestana",
       retryLabel: "Volver a la app",
       errorTitle: "No se pudo completar el inicio de sesion",
       errorDescription: "Vuelve a intentarlo desde la app.",
-      step1: "Autenticado",
-      step2: "Conectando a la app",
-      step3: "Listo",
     };
   }
 
   return {
     eyebrow: "AUTHENTICATION",
     title: "Authentication complete",
-    description: "WhisperType is returning you to the app. Continue there.",
-    closeHint: "This tab will close automatically.",
+    description: "WhisperType has returned to the app. Continue there.",
+    closeHint: "This tab is no longer needed. Close it below or manually.",
+    closeButton: "Close this tab",
     retryLabel: "Return to the app",
     errorTitle: "Authentication could not be completed",
     errorDescription: "Please try signing in again from the app.",
-    step1: "Authenticated",
-    step2: "Connecting to app",
-    step3: "Complete",
   };
 }
-
-const stepVariants = {
-  hidden: { opacity: 0, y: 12 },
-  visible: (i: number) => ({
-    opacity: 1,
-    y: 0,
-    transition: { delay: i * 0.15 + 0.3, duration: 0.4, ease: "easeOut" },
-  }),
-};
 
 export default function AuthCallback() {
   const [state, setState] = useState<CallbackState>("redirecting");
@@ -90,206 +73,121 @@ export default function AuthCallback() {
       return;
     }
 
-    // 1. まずアプリにディープリンクで戻る
-    try {
-      window.location.href = desktopCallbackUrl;
-    } catch {
-      // ignore
-    }
-
-    // 2. 少し待ってからタブを自動で閉じようと試みる
-    window.setTimeout(() => {
+    // 1. まずアプリにディープリンクで戻る（非同期で少し遅延させて確実に処理）
+    const redirectTimer = window.setTimeout(() => {
       try {
-        window.close();
+        window.location.href = desktopCallbackUrl;
       } catch {
-        // ブラウザがブロックした場合は無視
+        // ignore
       }
-      // 3. 閉じられなかったら完了画面を表示する
+    }, 50);
+
+    // 2. すぐに完了画面に切り替える
+    //    ブラウザは自動で閉じないので、ユーザーに「閉じる」を促す
+    const completeTimer = window.setTimeout(() => {
       setState(hasError ? "error" : "complete");
-    }, 900);
+    }, 200);
+
+    return () => {
+      window.clearTimeout(redirectTimer);
+      window.clearTimeout(completeTimer);
+    };
   }, [desktopCallbackUrl, search]);
 
   const isError = state === "error";
+  const isComplete = state === "complete";
+
+  const handleCloseTab = () => {
+    try {
+      window.close();
+    } catch {
+      // ignore
+    }
+  };
 
   return (
     <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-[#0f1117] px-6 py-8 text-slate-100">
-      {/* 背景の装飾 */}
+      {/* 背景装飾 */}
       <div className="pointer-events-none absolute inset-0 overflow-hidden">
         <div className="absolute -top-1/2 -left-1/4 h-[800px] w-[800px] rounded-full bg-indigo-500/10 blur-[120px]" />
         <div className="absolute -right-1/4 -bottom-1/2 h-[600px] w-[600px] rounded-full bg-emerald-500/8 blur-[100px]" />
       </div>
 
       <motion.div
-        initial={{ opacity: 0, scale: 0.96 }}
-        animate={{ opacity: 1, scale: 1 }}
-        transition={{ duration: 0.5, ease: "easeOut" }}
-        className="relative z-10 w-full max-w-md"
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5 }}
+        className="relative z-10 w-full max-w-sm"
       >
-        {/* カード */}
         <div className="overflow-hidden rounded-3xl border border-white/[0.08] bg-white/[0.03] shadow-2xl backdrop-blur-xl">
-          {/* ヘッダー部分 */}
-          <div className="relative flex flex-col items-center px-8 pt-10 pb-8">
-            {/* アイコン */}
-            <AnimatePresence mode="wait">
+          {/* アイコン */}
+          <div className="flex flex-col items-center px-8 pt-10">
+            <motion.div
+              initial={{ scale: 0 }}
+              animate={{ scale: 1 }}
+              transition={{ type: "spring", stiffness: 200, damping: 15 }}
+              className={`mb-6 flex h-20 w-20 items-center justify-center rounded-3xl ${
+                isError ? "bg-red-500/15" : "bg-emerald-500/15"
+              }`}
+            >
               {isError ? (
-                <motion.div
-                  key="error"
-                  initial={{ scale: 0, rotate: -45 }}
-                  animate={{ scale: 1, rotate: 0 }}
-                  transition={{ type: "spring", stiffness: 200, damping: 15 }}
-                  className="mb-6 flex h-16 w-16 items-center justify-center rounded-2xl bg-red-500/15"
-                >
-                  <XCircle className="h-8 w-8 text-red-400" />
-                </motion.div>
+                <XCircle className="h-10 w-10 text-red-400" />
               ) : (
-                <motion.div
-                  key="success"
-                  initial={{ scale: 0 }}
-                  animate={{ scale: 1 }}
-                  transition={{ type: "spring", stiffness: 200, damping: 15 }}
-                  className="mb-6 flex h-16 w-16 items-center justify-center rounded-2xl bg-emerald-500/15"
-                >
-                  <CheckCircle2 className="h-8 w-8 text-emerald-400" />
-                </motion.div>
+                <CheckCircle2 className="h-10 w-10 text-emerald-400" />
               )}
-            </AnimatePresence>
+            </motion.div>
 
-            <motion.p
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: 0.1 }}
-              className="text-[11px] font-semibold uppercase tracking-[0.24em] text-slate-400"
-            >
+            <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-slate-400">
               {copy.eyebrow}
-            </motion.p>
+            </p>
 
-            <motion.h1
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.2 }}
-              className="mt-3 text-2xl font-semibold tracking-tight"
-            >
+            <h1 className="mt-3 text-center text-2xl font-semibold tracking-tight">
               {isError ? copy.errorTitle : copy.title}
-            </motion.h1>
+            </h1>
 
-            <motion.p
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: 0.3 }}
-              className="mt-2 text-center text-sm leading-relaxed text-slate-400"
-            >
+            <p className="mt-2 text-center text-sm leading-relaxed text-slate-400">
               {isError ? copy.errorDescription : copy.description}
-            </motion.p>
+            </p>
           </div>
 
-          {/* ステップ表示 */}
-          <div className="space-y-3 px-8 pb-8">
-            {[copy.step1, copy.step2, copy.step3].map((label, i) => {
-              const isActive = !isError && (i === 0 || i === 1 || i === 2);
-              const isCurrent = !isError && i === 1 && state === "redirecting";
-              const isDone = !isError && i === 0;
-              const isLast = i === 2;
-
-              return (
-                <motion.div
-                  key={label}
-                  custom={i}
-                  initial="hidden"
-                  animate="visible"
-                  variants={stepVariants}
-                  className={`flex items-center gap-3 rounded-2xl border px-4 py-3.5 transition-colors ${
-                    isError
-                      ? "border-white/[0.05] bg-white/[0.02] opacity-40"
-                      : isDone
-                        ? "border-emerald-500/20 bg-emerald-500/[0.06]"
-                        : isCurrent
-                          ? "border-indigo-500/20 bg-indigo-500/[0.06]"
-                          : "border-white/[0.05] bg-white/[0.02]"
-                  }`}
-                >
-                  <div
-                    className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-bold ${
-                      isError
-                        ? "bg-white/[0.05] text-slate-500"
-                        : isDone
-                          ? "bg-emerald-500/20 text-emerald-400"
-                          : isCurrent
-                            ? "bg-indigo-500/20 text-indigo-400"
-                            : "bg-white/[0.05] text-slate-400"
-                    }`}
-                  >
-                    {isDone ? (
-                      <CheckCircle2 className="h-4 w-4" />
-                    ) : isCurrent && state === "redirecting" ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      isLast && state === "complete" ? (
-                        <CheckCircle2 className="h-4 w-4" />
-                      ) : (
-                        i + 1
-                      )
-                    )}
-                  </div>
-                  <span
-                    className={`text-sm font-medium ${
-                      isError
-                        ? "text-slate-500"
-                        : isDone || isCurrent
-                          ? "text-slate-200"
-                          : "text-slate-400"
-                    }`}
-                  >
-                    {label}
-                  </span>
-                  {isCurrent && !isError && (
-                    <motion.div
-                      initial={{ opacity: 0, x: -4 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      className="ml-auto"
-                    >
-                      <ArrowRight className="h-4 w-4 text-indigo-400" />
-                    </motion.div>
-                  )}
-                </motion.div>
-              );
-            })}
-
-            {/* ボタン or ヒント */}
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: 0.8 }}
-              className="pt-2"
-            >
-              {isError ? (
+          {/* アクションエリア */}
+          <div className="px-8 pt-8 pb-10">
+            {isError ? (
+              <button
+                type="button"
+                onClick={() => {
+                  window.location.href = desktopCallbackUrl;
+                }}
+                className="flex h-12 w-full items-center justify-center gap-2 rounded-2xl bg-white/[0.08] px-5 text-sm font-medium text-white transition hover:bg-white/[0.12]"
+              >
+                <ExternalLink className="h-4 w-4" />
+                {copy.retryLabel}
+              </button>
+            ) : isComplete ? (
+              <div className="space-y-4">
                 <button
                   type="button"
-                  onClick={() => {
-                    window.location.href = desktopCallbackUrl;
-                  }}
-                  className="flex h-12 w-full items-center justify-center gap-2 rounded-2xl bg-white/[0.08] px-5 text-sm font-medium text-white transition hover:bg-white/[0.12]"
+                  onClick={handleCloseTab}
+                  className="group flex h-12 w-full items-center justify-center gap-2 rounded-2xl bg-emerald-500/15 px-5 text-sm font-medium text-emerald-300 transition hover:bg-emerald-500/25"
                 >
-                  <ArrowRight className="h-4 w-4" />
-                  {copy.retryLabel}
+                  <X className="h-4 w-4 transition group-hover:rotate-90" />
+                  {copy.closeButton}
                 </button>
-              ) : (
                 <p className="text-center text-xs leading-relaxed text-slate-500">
                   {copy.closeHint}
                 </p>
-              )}
-            </motion.div>
+              </div>
+            ) : (
+              <div className="flex h-12 items-center justify-center">
+                <div className="h-5 w-5 animate-spin rounded-full border-2 border-slate-600 border-t-emerald-400" />
+              </div>
+            )}
           </div>
         </div>
 
-        {/* フッターロゴ */}
-        <motion.p
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 1 }}
-          className="mt-8 text-center text-xs font-medium tracking-wide text-slate-600"
-        >
+        <p className="mt-8 text-center text-xs font-medium tracking-wide text-slate-600">
           WhisperType
-        </motion.p>
+        </p>
       </motion.div>
     </div>
   );

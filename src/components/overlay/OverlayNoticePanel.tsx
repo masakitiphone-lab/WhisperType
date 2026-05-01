@@ -1,5 +1,4 @@
 import { GlassButton } from "@/components/einui/glass-button";
-import { getLiquidGlassAccentStyle } from "@/components/overlay/liquidGlassAccent";
 import type { OverlayNoticeViewModel } from "@/lib/overlayNotice";
 
 type OverlayNoticePanelProps = {
@@ -11,36 +10,29 @@ type OverlayNoticePanelProps = {
 };
 
 export function OverlayNoticePanel({ notice, reduceMotion, onClose, onOpenApp, onCopy }: OverlayNoticePanelProps) {
-  const liquidGlassAccent = getLiquidGlassAccentStyle("default");
   const shellStyle = {
     width: "100%",
     height: "100%",
-    borderRadius: "18px",
+    borderRadius: "20px",
     overflow: "hidden",
-    padding: "12px",
-    border: "1px solid rgba(255,255,255,0.18)",
-    background: "linear-gradient(180deg, rgba(255,255,255,0.16) 0%, rgba(255,255,255,0.10) 18%, rgba(255,255,255,0.06) 52%, rgba(255,255,255,0.04) 100%)",
-    backdropFilter: reduceMotion ? "blur(18px) saturate(1.25)" : "blur(24px) saturate(1.42)",
-    WebkitBackdropFilter: reduceMotion ? "blur(18px) saturate(1.25)" : "blur(24px) saturate(1.42)",
-    boxShadow: `0 14px 28px rgba(15,23,42,0.16), ${liquidGlassAccent.highlightBorder}, ${liquidGlassAccent.shadowBorder}`,
+    padding: "14px",
+    border: "1px solid rgba(226,232,240,0.92)",
+    background: "linear-gradient(180deg, rgba(255,255,255,0.98) 0%, rgba(248,250,252,0.96) 100%)",
+    backdropFilter: reduceMotion ? "blur(8px)" : "blur(12px)",
+    WebkitBackdropFilter: reduceMotion ? "blur(8px)" : "blur(12px)",
+    boxShadow: "0 16px 40px rgba(15,23,42,0.16), 0 2px 10px rgba(15,23,42,0.08)",
     color: "#0f172a",
     display: "flex",
     flexDirection: "column",
-    gap: "8px",
+    gap: "12px",
   } as const;
 
   const actionStripStyle = {
     display: "flex",
+    flexWrap: "wrap",
     justifyContent: "flex-end",
-    gap: "5px",
-    marginTop: "1px",
-    padding: "5px 7px",
-    borderRadius: "14px",
-    background: "linear-gradient(180deg, rgba(255,255,255,0.22), rgba(246,248,250,0.10))",
-    border: "1px solid rgba(255,255,255,0.16)",
-    boxShadow: "inset 0 1px 0 rgba(255,255,255,0.45), 0 6px 14px rgba(15,23,42,0.06)",
-    backdropFilter: reduceMotion ? "blur(4px) saturate(1.0)" : "blur(6px) saturate(1.0)",
-    WebkitBackdropFilter: reduceMotion ? "blur(4px) saturate(1.0)" : "blur(6px) saturate(1.0)",
+    gap: "8px",
+    marginTop: "2px",
   } as const;
 
   return (
@@ -53,36 +45,57 @@ export function OverlayNoticePanel({ notice, reduceMotion, onClose, onOpenApp, o
               alignItems: "center",
               width: "fit-content",
               borderRadius: "999px",
-              padding: "2px 7px",
-              background: notice.kind === "error" ? "rgba(248,113,113,0.14)" : "rgba(15,23,42,0.08)",
-              color: notice.kind === "error" ? "#b91c1c" : "#334155",
+              padding: "4px 8px",
+              background: notice.kind === "error" ? "#fef2f2" : "#eef2ff",
+              color: notice.kind === "error" ? "#b42318" : "#334155",
               fontSize: "8px",
               fontWeight: 700,
-              letterSpacing: "0.08em",
+              letterSpacing: "0.06em",
               textTransform: "uppercase",
             }}
           >
             {notice.badgeLabel}
           </div>
-          <div style={{ fontSize: "10px", fontWeight: 650, lineHeight: 1.2 }}>{notice.title}</div>
-          <div style={{ fontSize: "8.5px", lineHeight: 1.35, color: "#475569" }}>{notice.message}</div>
+          <div style={{ fontSize: "13px", fontWeight: 700, lineHeight: 1.35 }}>{notice.title}</div>
+          <div style={{ fontSize: "10px", lineHeight: 1.5, color: "#475569" }}>{notice.message}</div>
         </div>
-        <div style={{ width: "18px", height: "18px", flexShrink: 0 }} />
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label={notice.closeLabel}
+          style={{
+            width: "24px",
+            height: "24px",
+            flexShrink: 0,
+            borderRadius: "999px",
+            border: "1px solid #e2e8f0",
+            background: "#ffffff",
+            color: "#64748b",
+            fontSize: "14px",
+            lineHeight: 1,
+            display: "grid",
+            placeItems: "center",
+            boxShadow: "0 1px 2px rgba(15,23,42,0.06)",
+            cursor: "pointer",
+          }}
+        >
+          ×
+        </button>
       </div>
 
       {notice.text ? (
         <div
           style={{
             borderRadius: "12px",
-            border: "1px solid rgba(15,23,42,0.08)",
-            background: "rgba(255,255,255,0.42)",
-            padding: "6px 8px",
+            border: "1px solid #e2e8f0",
+            background: "#f8fafc",
+            padding: "8px 10px",
             fontSize: "9px",
-            lineHeight: 1.65,
+            lineHeight: 1.6,
             color: "#334155",
             whiteSpace: "pre-wrap",
             wordBreak: "break-word",
-            maxHeight: "30px",
+            maxHeight: "72px",
             overflow: "auto",
           }}
         >
@@ -91,15 +104,18 @@ export function OverlayNoticePanel({ notice, reduceMotion, onClose, onOpenApp, o
       ) : null}
 
       <div style={actionStripStyle}>
-        <GlassButton type="button" onClick={onClose} variant="outline" size="sm">
-          {notice.closeLabel}
-        </GlassButton>
         {notice.copyLabel && notice.text && onCopy ? (
-          <GlassButton type="button" onClick={onCopy} variant="outline" size="sm">
+          <GlassButton type="button" onClick={onCopy} variant="outline" size="sm" className="border-slate-300 bg-white text-slate-700 hover:bg-slate-50">
             {notice.copyLabel}
           </GlassButton>
         ) : null}
-        <GlassButton type="button" onClick={onOpenApp} variant="primary" size="sm">
+        <GlassButton
+          type="button"
+          onClick={onOpenApp}
+          variant="primary"
+          size="sm"
+          className="border-slate-900 bg-slate-900 text-white shadow-[0_8px_20px_rgba(15,23,42,0.18)] hover:bg-slate-800 hover:shadow-[0_10px_24px_rgba(15,23,42,0.22)] before:hidden"
+        >
           {notice.openLabel}
         </GlassButton>
       </div>

@@ -1,13 +1,14 @@
 import { useEffect, useState } from "react";
+import { invoke } from "@tauri-apps/api/core";
 import { AnimatePresence, motion } from "motion/react";
 import { CapsuleShell } from "@/components/overlay/CapsuleShell";
 import { OverlayNoticePanel } from "@/components/overlay/OverlayNoticePanel";
 import { TransitioningOverlayIcon } from "@/components/overlay/TransitioningOverlayIcon";
 import { WaveformStrip } from "@/components/overlay/WaveformStrip";
 import { useRecordingController } from "@/hooks/RecordingControllerContext";
+import { useMeasuredElementSize } from "@/hooks/useMeasuredElementSize";
 import {
   BASE_HEIGHT,
-  CAPSULE_EXPANDED_WIDTH,
   WAVEFORM_BAR_COUNT,
   WAVEFORM_BAR_GAP,
   WAVEFORM_BAR_WIDTH,
@@ -66,6 +67,8 @@ export default function OverlayPage() {
   } = useRecordingController();
 
   const [now, setNow] = useState(() => Date.now());
+  const noticeMeasure = useMeasuredElementSize<HTMLDivElement>();
+  const capsuleMeasure = useMeasuredElementSize<HTMLDivElement>();
 
   useEffect(() => {
     let frame = 0;
@@ -84,12 +87,35 @@ export default function OverlayPage() {
   const iconBallSize = BASE_HEIGHT - 4;
   const iconBallInnerSize = 24;
   const capsuleContentBandWidth = getCapsuleExpandedWidth();
-  const showTransitionIcon = showCapsule || capsulePhase === "closing" || spinnerPhase !== "hidden";
+  const showTransitionIcon = !overlayNotice && (showCapsule || capsulePhase === "closing" || spinnerPhase !== "hidden");
   const capsuleAnimationProgress = getPhaseAnimationProgress(capsulePhase, now - capsulePhaseStartedAt);
   const capsuleWidthProgress = getCapsuleWidthProgress(capsulePhase, now - capsulePhaseStartedAt);
   const capsuleAnimatedWidth = getCapsuleAnimationWidth(capsuleWidthProgress);
+  const capsuleRenderWidth = Math.max(capsuleAnimatedWidth, capsuleContentBandWidth);
   const iconTravelX = getIconTravelX(capsuleAnimationProgress, stageWidth, capsuleContentBandWidth, iconBallSize);
   const waveformOpacity = getWaveformPhaseOpacity(capsulePhase, now - capsulePhaseStartedAt);
+  const noticeWidth = overlayNotice?.width ?? 320;
+  const noticeMinHeight = overlayNotice?.minHeight ?? 112;
+  const measuredStageWidth = overlayNotice
+    ? noticeMeasure.size?.width ?? noticeWidth
+    : capsuleMounted
+      ? capsuleMeasure.size?.width ?? stageWidth
+      : stageWidth;
+  const measuredStageHeight = overlayNotice
+    ? noticeMeasure.size?.height ?? noticeMinHeight
+    : capsuleMounted
+      ? capsuleMeasure.size?.height ?? stageHeight
+      : stageHeight;
+
+  useEffect(() => {
+    if (!isOverlayVisible) {
+      return;
+    }
+    void invoke("resize_overlay_window_command", {
+      width: measuredStageWidth * overlayScale,
+      height: measuredStageHeight * overlayScale,
+    }).catch((err) => console.error("resize_overlay_window_command failed:", err));
+  }, [isOverlayVisible, measuredStageHeight, measuredStageWidth, overlayScale]);
 
   return (
     <div
@@ -103,8 +129,8 @@ export default function OverlayPage() {
         alignItems: "center",
         justifyContent: "center",
         pointerEvents: "none",
-        height: `${stageHeight * overlayScale}px`,
-        width: `${stageWidth * overlayScale}px`,
+        height: `${measuredStageHeight * overlayScale}px`,
+        width: `${measuredStageWidth * overlayScale}px`,
       }}
     >
       <div
@@ -112,8 +138,8 @@ export default function OverlayPage() {
           position: "absolute",
           left: "50%",
           top: "50%",
-          width: `${stageWidth}px`,
-          height: `${stageHeight}px`,
+          width: `${measuredStageWidth}px`,
+          height: `${measuredStageHeight}px`,
           transform: `translate(-50%, -50%) scale(${overlayScale})`,
           transformOrigin: "center center",
         }}
@@ -121,73 +147,95 @@ export default function OverlayPage() {
         <div style={{ position: "relative", width: "100%", height: "100%" }}>
           <AnimatePresence mode="wait" initial={false}>
             {isOverlayVisible && overlayNotice ? (
-              <motion.div
-                key={`notice-${overlayPresentationVersion}`}
-                initial={glassShellMotion.initial}
-                animate={glassShellMotion.animate}
-                exit={glassShellMotion.exit}
+              <div
+                ref={noticeMeasure.ref}
                 style={{
                   position: "absolute",
-                  left: `${(stageWidth - 320) / -2}px`,
-                  top: `${(stageHeight - 96) / -2}px`,
-                  width: "320px",
-                  minHeight: "96px",
-                  borderRadius: "12px",
-                  background: "transparent",
-                  border: "none",
-                  boxShadow: "none",
-                  padding: "0",
+                  left: "50%",
+                  top: "50%",
+                  width: `${noticeWidth}px`,
+                  minHeight: `${noticeMinHeight}px`,
+                  transform: "translate(-50%, -50%)",
                   pointerEvents: "auto",
                 }}
               >
-                <OverlayNoticePanel
-                  notice={overlayNotice}
-                  reduceMotion={!!shouldReduceMotion}
-                  onClose={() => {
-                    void clearOverlayNotice();
+                <motion.div
+                  key={`notice-${overlayPresentationVersion}`}
+                  initial={glassShellMotion.initial}
+                  animate={glassShellMotion.animate}
+                  exit={glassShellMotion.exit}
+                  style={{
+                    width: "100%",
+                    minHeight: "100%",
+                    borderRadius: "12px",
+                    background: "transparent",
+                    border: "none",
+                    boxShadow: "none",
+                    padding: "0",
+                    transformOrigin: "center center",
                   }}
-                  onOpenApp={async () => {
-                    await openAppFromOverlay();
-                  }}
-                  onCopy={
-                    overlayNotice.copyLabel && overlayNotice.text
-                      ? async () => {
-                          await navigator.clipboard.writeText(overlayNotice.text ?? "");
-                        }
-                      : undefined
-                  }
-                />
-              </motion.div>
+                >
+                  <OverlayNoticePanel
+                    notice={overlayNotice}
+                    reduceMotion={!!shouldReduceMotion}
+                    onClose={() => {
+                      void clearOverlayNotice();
+                    }}
+                    onOpenApp={async () => {
+                      await openAppFromOverlay();
+                    }}
+                    onCopy={
+                      overlayNotice.copyLabel && overlayNotice.text
+                        ? async () => {
+                            await navigator.clipboard.writeText(overlayNotice.text ?? "");
+                          }
+                        : undefined
+                    }
+                  />
+                </motion.div>
+              </div>
             ) : null}
           </AnimatePresence>
 
           <AnimatePresence mode="wait" initial={false}>
             {isOverlayVisible && capsuleMounted ? (
-              <CapsuleShell
-                show={capsuleMounted}
-                width={Math.max(capsuleAnimatedWidth, CAPSULE_EXPANDED_WIDTH)}
-                height={BASE_HEIGHT}
-                radius={capsuleRadius}
-                reduceMotion={!!shouldReduceMotion}
-                phase={capsulePhase}
-                contentVisible={showCapsuleContent}
+              <div
+                ref={capsuleMeasure.ref}
+                style={{
+                  position: "absolute",
+                  left: "50%",
+                  top: "50%",
+                  width: `${capsuleRenderWidth}px`,
+                  height: `${BASE_HEIGHT}px`,
+                  transform: "translate(-50%, -50%)",
+                }}
               >
-                <div style={{ position: "relative", width: "100%", height: "100%", overflow: "hidden", background: "transparent" }}>
-                  <WaveformStrip
-                    show={showWaveform}
-                    showContent={showCapsuleContent}
-                    isClosing={capsulePhase === "closing"}
-                    opacity={waveformOpacity}
-                    capsuleWidth={Math.max(capsuleAnimatedWidth, CAPSULE_EXPANDED_WIDTH)}
-                    barWidth={WAVEFORM_BAR_WIDTH}
-                    barGap={WAVEFORM_BAR_GAP}
-                    barCount={WAVEFORM_BAR_COUNT}
-                    barViewHeight={WAVEFORM_VIEW_HEIGHT}
-                    levels={waveformLevels}
-                    reduceMotion={!!shouldReduceMotion}
-                  />
-                </div>
-              </CapsuleShell>
+                <CapsuleShell
+                  show={capsuleMounted}
+                  width={capsuleRenderWidth}
+                  height={BASE_HEIGHT}
+                  radius={capsuleRadius}
+                  reduceMotion={!!shouldReduceMotion}
+                  phase={capsulePhase}
+                  contentVisible={showCapsuleContent}
+                >
+                  <div style={{ position: "relative", width: "100%", height: "100%", overflow: "hidden", background: "transparent" }}>
+                    <WaveformStrip
+                      show={showWaveform}
+                      showContent={showCapsuleContent}
+                      isClosing={capsulePhase === "closing"}
+                      opacity={waveformOpacity}
+                      capsuleWidth={capsuleRenderWidth}
+                      barWidth={WAVEFORM_BAR_WIDTH}
+                      barGap={WAVEFORM_BAR_GAP}
+                      barCount={WAVEFORM_BAR_COUNT}
+                      barViewHeight={WAVEFORM_VIEW_HEIGHT}
+                      levels={waveformLevels}
+                      reduceMotion={!!shouldReduceMotion}
+                    />
+                  </div>
+                </CapsuleShell>
+              </div>
             ) : null}
           </AnimatePresence>
 
@@ -205,7 +253,6 @@ export default function OverlayPage() {
               />
             ) : null}
           </AnimatePresence>
-
         </div>
       </div>
     </div>

@@ -1,23 +1,23 @@
-import { useState, type ReactNode } from "react";
 import { Navigate } from "react-router-dom";
 import { Eye, Globe2, Lock, Mail, ShieldCheck, Sparkles, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/useAuth";
-import loginDeskIllustration from "@/assets/login-desk-illustration.png";
+import loginHeroIllustration from "@/assets/login-hero-illustration.png";
 import type { AppLocale } from "@/lib/appLocale";
 
 type LoginUiCopy = {
   headline: string;
   description: string;
   metricPrefix: string;
+  metricNumber: string;
   metricSuffix: string;
   metricLabel: string;
-  fastTitle: string;
-  fastDescription: string;
-  correctionTitle: string;
-  correctionDescription: string;
-  anywhereTitle: string;
-  anywhereDescription: string;
+  featureFastTitle: string;
+  featureFastBody: string;
+  featureNaturalTitle: string;
+  featureNaturalBody: string;
+  featureAnywhereTitle: string;
+  featureAnywhereBody: string;
   trustNote: string;
   privacyLabel: string;
   termsLabel: string;
@@ -28,94 +28,58 @@ type LoginUiCopy = {
   passwordLabel: string;
   passwordPlaceholder: string;
   forgotPassword: string;
-  signInLabel: string;
+  submitLabel: string;
   dividerLabel: string;
   googleLabel: string;
   signUpPrompt: string;
   signUpLabel: string;
   openingBrowser: string;
-  errorFallback: string;
 };
 
-function getLoginUiCopy(locale: AppLocale): LoginUiCopy {
-  if (locale === "ja") {
-    return {
-      headline: "話すだけで、\n考える時間をつくる。",
-      description: "WhisperTypeは、あなたの考えをすばやく文字に変えます。",
-      metricPrefix: "最短",
-      metricSuffix: "秒台で",
-      metricLabel: "文字起こし",
-      fastTitle: "すばやく文字起こし",
-      fastDescription: "最短1秒台でテキスト化を実現します。",
-      correctionTitle: "自然な文章補正",
-      correctionDescription: "AIが文脈を理解し、自然で読みやすい文章に整えます。",
-      anywhereTitle: "どこでも使える",
-      anywhereDescription: "ショートカットやモバイルから、いつでもどこでも記録できます。",
-      trustNote: "データは暗号化され、安全に保護されています。",
-      privacyLabel: "プライバシー",
-      termsLabel: "利用規約",
-      panelTitle: "おかえりなさい",
-      panelDescription: "WhisperTypeアカウントにログインして、すぐに音声入力を再開しましょう。",
-      emailLabel: "メールアドレス",
-      emailPlaceholder: "you@example.com",
-      passwordLabel: "パスワード",
-      passwordPlaceholder: "パスワードを入力",
-      forgotPassword: "パスワードをお忘れですか？",
-      signInLabel: "ログイン",
-      dividerLabel: "または",
-      googleLabel: "Googleで続ける",
-      signUpPrompt: "アカウントをお持ちでない方は",
-      signUpLabel: "新規登録",
-      openingBrowser: "ブラウザを開いています...",
-      errorFallback: "ログインを完了できませんでした。少し時間をおいてもう一度お試しください。",
-    };
-  }
-
-  if (locale === "es") {
-    return {
-      headline: "Habla y recupera\ntiempo para pensar.",
-      description: "WhisperType convierte tus ideas en texto con rapidez.",
-      metricPrefix: "Desde",
-      metricSuffix: "segundo",
-      metricLabel: "transcripcion",
-      fastTitle: "Transcripcion rapida",
-      fastDescription: "Convierte voz en texto en segundos.",
-      correctionTitle: "Correccion natural",
-      correctionDescription: "La IA entiende el contexto y pule el texto.",
-      anywhereTitle: "Usalo donde quieras",
-      anywhereDescription: "Dicta desde atajos y flujos de escritorio.",
-      trustNote: "Tus datos estan cifrados y protegidos.",
-      privacyLabel: "Privacidad",
-      termsLabel: "Terminos",
-      panelTitle: "Bienvenido",
-      panelDescription: "Inicia sesion y vuelve a dictar en segundos.",
-      emailLabel: "Correo electronico",
-      emailPlaceholder: "you@example.com",
-      passwordLabel: "Contrasena",
-      passwordPlaceholder: "Ingresa tu contrasena",
-      forgotPassword: "Olvidaste tu contrasena?",
-      signInLabel: "Iniciar sesion",
-      dividerLabel: "o",
-      googleLabel: "Continuar con Google",
-      signUpPrompt: "No tienes cuenta?",
-      signUpLabel: "Registrate",
-      openingBrowser: "Abriendo navegador...",
-      errorFallback: "No se pudo completar el inicio de sesion.",
-    };
-  }
-
-  return {
+const LOGIN_COPY: Record<AppLocale, LoginUiCopy> = {
+  ja: {
+    headline: "話すだけで、\n考える時間をつくる。",
+    description: "WhisperTypeは、あなたの考えをすばやく文字に変えます。",
+    metricPrefix: "最短",
+    metricNumber: "1",
+    metricSuffix: "秒台で",
+    metricLabel: "文字起こし",
+    featureFastTitle: "すばやく文字起こし",
+    featureFastBody: "最短1秒台でテキスト化を実現します。",
+    featureNaturalTitle: "自然な文章補正",
+    featureNaturalBody: "AIが文脈を理解し、自然で読みやすい文章に整えます。",
+    featureAnywhereTitle: "どこでも使える",
+    featureAnywhereBody: "ショートカットやモバイルから、いつでもどこでも記録できます。",
+    trustNote: "データは暗号化され、安全に保護されています。",
+    privacyLabel: "プライバシー",
+    termsLabel: "利用規約",
+    panelTitle: "おかえりなさい",
+    panelDescription: "WhisperTypeアカウントにログインして、すぐに音声入力を再開しましょう。",
+    emailLabel: "メールアドレス",
+    emailPlaceholder: "you@example.com",
+    passwordLabel: "パスワード",
+    passwordPlaceholder: "パスワードを入力",
+    forgotPassword: "パスワードをお忘れですか？",
+    submitLabel: "ログイン",
+    dividerLabel: "または",
+    googleLabel: "Googleで続ける",
+    signUpPrompt: "アカウントをお持ちでない方は",
+    signUpLabel: "新規登録",
+    openingBrowser: "ブラウザを開いています...",
+  },
+  en: {
     headline: "Talk freely,\nmake time to think.",
     description: "WhisperType turns your ideas into text quickly.",
     metricPrefix: "From",
+    metricNumber: "1",
     metricSuffix: "second",
     metricLabel: "transcription",
-    fastTitle: "Fast transcription",
-    fastDescription: "Turn speech into text in seconds.",
-    correctionTitle: "Natural correction",
-    correctionDescription: "AI understands context and polishes your writing.",
-    anywhereTitle: "Use it anywhere",
-    anywhereDescription: "Dictate from shortcuts and desktop workflows.",
+    featureFastTitle: "Fast transcription",
+    featureFastBody: "Turn speech into text in seconds.",
+    featureNaturalTitle: "Natural correction",
+    featureNaturalBody: "AI understands context and polishes your writing.",
+    featureAnywhereTitle: "Use it anywhere",
+    featureAnywhereBody: "Dictate from shortcuts and desktop workflows.",
     trustNote: "Your data is encrypted and protected.",
     privacyLabel: "Privacy",
     termsLabel: "Terms",
@@ -126,31 +90,60 @@ function getLoginUiCopy(locale: AppLocale): LoginUiCopy {
     passwordLabel: "Password",
     passwordPlaceholder: "Enter password",
     forgotPassword: "Forgot password?",
-    signInLabel: "Log in",
+    submitLabel: "Log in",
     dividerLabel: "or",
     googleLabel: "Continue with Google",
     signUpPrompt: "Do not have an account?",
     signUpLabel: "Sign up",
     openingBrowser: "Opening browser...",
-    errorFallback: "Login could not be completed.",
-  };
-}
+  },
+  es: {
+    headline: "Habla y recupera\ntiempo para pensar.",
+    description: "WhisperType convierte tus ideas en texto con rapidez.",
+    metricPrefix: "Desde",
+    metricNumber: "1",
+    metricSuffix: "segundo",
+    metricLabel: "transcripcion",
+    featureFastTitle: "Transcripcion rapida",
+    featureFastBody: "Convierte voz en texto en segundos.",
+    featureNaturalTitle: "Correccion natural",
+    featureNaturalBody: "La IA entiende el contexto y pule el texto.",
+    featureAnywhereTitle: "Usalo donde quieras",
+    featureAnywhereBody: "Dicta desde atajos y flujos de escritorio.",
+    trustNote: "Tus datos estan cifrados y protegidos.",
+    privacyLabel: "Privacidad",
+    termsLabel: "Terminos",
+    panelTitle: "Bienvenido",
+    panelDescription: "Inicia sesion y vuelve a dictar en segundos.",
+    emailLabel: "Correo electronico",
+    emailPlaceholder: "you@example.com",
+    passwordLabel: "Contrasena",
+    passwordPlaceholder: "Ingresa tu contrasena",
+    forgotPassword: "Olvidaste tu contrasena?",
+    submitLabel: "Iniciar sesion",
+    dividerLabel: "o",
+    googleLabel: "Continuar con Google",
+    signUpPrompt: "No tienes cuenta?",
+    signUpLabel: "Registrate",
+    openingBrowser: "Abriendo navegador...",
+  },
+};
 
 export default function LoginPage({ appLocale }: { appLocale: AppLocale }) {
   const { user, signInWithGoogle, isLoading, authFlowStatus } = useAuth();
-  const [isSigningIn, setIsSigningIn] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const copy = getLoginUiCopy(appLocale);
+  const locale =
+    appLocale === "en" &&
+    typeof navigator !== "undefined" &&
+    navigator.language.toLowerCase().startsWith("ja")
+      ? "ja"
+      : appLocale;
+  const copy = LOGIN_COPY[locale] ?? LOGIN_COPY.ja;
 
   const handleGoogleSignIn = async () => {
     try {
-      setError(null);
-      setIsSigningIn(true);
       await signInWithGoogle();
-    } catch (err: unknown) {
-      console.error("Sign in error:", err);
-      setError(copy.errorFallback);
-      setIsSigningIn(false);
+    } catch (error) {
+      console.error("Sign in error:", error);
     }
   };
 
@@ -159,151 +152,136 @@ export default function LoginPage({ appLocale }: { appLocale: AppLocale }) {
   }
 
   return (
-    <div className="min-h-screen overflow-hidden bg-white text-[#080b10]">
-      <div className="grid min-h-screen xl:grid-cols-[minmax(0,1.65fr)_minmax(400px,0.95fr)]">
-        <section className="relative flex min-h-[650px] flex-col border-b border-slate-200 px-5 py-6 sm:px-7 xl:border-b-0 xl:border-r">
+    <div className="min-h-screen bg-[#fdfcf9] text-[#0b0e14]">
+      <div className="mx-auto grid min-h-screen w-full max-w-[1440px] xl:grid-cols-[minmax(0,1.62fr)_minmax(420px,0.88fr)]">
+        <section className="flex min-h-0 flex-col border-b border-[#e8e2d7] px-6 py-6 sm:px-8 lg:px-10 lg:py-7 xl:border-b-0 xl:border-r">
           <div className="flex items-center gap-3">
-            <img src="/app-icon.png" alt="" className="h-9 w-9" />
-            <span className="text-2xl font-semibold tracking-[-0.03em]">WhisperType</span>
+            <img src="/app-icon.png" alt="" className="h-10 w-10 rounded-[10px]" />
+            <span className="text-[18px] font-semibold tracking-[-0.02em]">WhisperType</span>
           </div>
 
-          <div className="grid flex-1 content-start gap-8 pt-10 lg:grid-cols-[minmax(0,0.9fr)_minmax(320px,0.8fr)] lg:items-center xl:gap-4">
+          <div className="grid flex-1 gap-8 pt-6 xl:grid-cols-[minmax(0,0.94fr)_minmax(360px,0.86fr)] xl:items-center xl:gap-8">
             <div className="min-w-0">
-              <div className="max-w-3xl">
-                <h1 className="whitespace-pre-line text-[clamp(2.35rem,6vw,4.15rem)] font-semibold leading-[1.28] tracking-normal">
-                  {copy.headline}
-                </h1>
-                <p className="mt-7 text-lg font-medium leading-8 text-slate-800">{copy.description}</p>
-              </div>
+              <h1 className="max-w-[620px] whitespace-pre-line text-[clamp(3rem,5.4vw,4.55rem)] font-semibold leading-[1.26] tracking-[-0.035em] text-[#111111]">
+                {copy.headline}
+              </h1>
+              <p className="mt-7 max-w-[520px] text-[15px] leading-8 text-[#3f434d] sm:text-[18px]">
+                {copy.description}
+              </p>
 
-              <div className="mt-12 flex flex-wrap items-center gap-5">
-                <span className="text-2xl font-semibold tracking-normal">{copy.metricPrefix}</span>
-                <span className="bg-[linear-gradient(140deg,#ff5aa7_8%,#7c6cff_50%,#43d6ef_92%)] bg-clip-text text-[clamp(4.5rem,10vw,6rem)] font-semibold leading-none text-transparent">
-                  1
+              <div className="mt-10 flex flex-wrap items-end gap-x-4 gap-y-3 text-[#111111]">
+                <span className="pb-2 text-[22px] font-semibold">{copy.metricPrefix}</span>
+                <span className="bg-[linear-gradient(180deg,#f573b8_0%,#8d71ff_52%,#59d1ee_100%)] bg-clip-text text-[clamp(4.8rem,8vw,6rem)] font-semibold leading-none text-transparent">
+                  {copy.metricNumber}
                 </span>
-                <div className="text-3xl font-semibold leading-[1.45] tracking-normal">
-                  <p>{copy.metricSuffix}</p>
-                  <p>{copy.metricLabel}</p>
+                <div className="text-[clamp(2rem,3.1vw,2.35rem)] font-semibold leading-[1.34]">
+                  <div>{copy.metricSuffix}</div>
+                  <div>{copy.metricLabel}</div>
                 </div>
               </div>
             </div>
 
-            <div className="flex min-w-0 justify-center lg:justify-end">
+            <div className="flex items-center justify-center xl:justify-end">
               <img
-                src={loginDeskIllustration}
+                src={loginHeroIllustration}
                 alt=""
-                className="pointer-events-none aspect-[14/9] w-full max-w-[610px] min-w-0 select-none object-contain"
+                className="w-full max-w-[520px] object-contain xl:max-w-[560px]"
               />
             </div>
           </div>
 
-          <div className="grid gap-6 pb-12 pt-11 md:grid-cols-3">
-            <FeatureItem icon={<Zap className="h-8 w-8" />} title={copy.fastTitle} description={copy.fastDescription} />
-            <FeatureItem
-              icon={<Sparkles className="h-8 w-8" />}
-              title={copy.correctionTitle}
-              description={copy.correctionDescription}
-            />
-            <FeatureItem
-              icon={<Globe2 className="h-8 w-8" />}
-              title={copy.anywhereTitle}
-              description={copy.anywhereDescription}
-            />
+          <div className="grid gap-4 border-b border-[#e8e2d7] py-6 md:grid-cols-3 md:gap-0">
+            <FeatureItem icon={<Zap className="h-7 w-7" />} title={copy.featureFastTitle} body={copy.featureFastBody} />
+            <FeatureItem icon={<Sparkles className="h-7 w-7" />} title={copy.featureNaturalTitle} body={copy.featureNaturalBody} />
+            <FeatureItem icon={<Globe2 className="h-7 w-7" />} title={copy.featureAnywhereTitle} body={copy.featureAnywhereBody} />
           </div>
 
-          <div className="flex flex-wrap items-center gap-x-8 gap-y-3 border-t border-slate-200 pt-5 text-sm text-slate-500">
+          <div className="flex flex-wrap items-center gap-x-8 gap-y-3 pt-5 text-[13px] text-[#707684]">
             <span className="flex items-center gap-2">
-              <ShieldCheck className="h-5 w-5" />
+              <ShieldCheck className="h-4 w-4" />
               {copy.trustNote}
             </span>
-            <span className="hidden h-6 w-px bg-slate-200 md:block" />
             <span>{copy.privacyLabel}</span>
-            <span className="hidden h-6 w-px bg-slate-200 md:block" />
             <span>{copy.termsLabel}</span>
           </div>
         </section>
 
-        <section className="flex items-center px-5 py-12 sm:px-7 lg:px-14">
-          <div className="mx-auto w-full max-w-[460px]">
-            <h2 className="text-[clamp(2.2rem,7vw,2.7rem)] font-semibold leading-tight tracking-normal">{copy.panelTitle}</h2>
-            <p className="mt-5 max-w-sm text-base leading-8 text-slate-600">{copy.panelDescription}</p>
+        <section className="flex min-h-0 items-center px-6 py-8 sm:px-8 lg:px-12">
+          <div className="mx-auto w-full max-w-[412px]">
+            <h2 className="text-[clamp(2.55rem,4.1vw,3.05rem)] font-semibold tracking-[-0.03em] text-[#111111]">
+              {copy.panelTitle}
+            </h2>
+            <p className="mt-5 max-w-[360px] text-[15px] leading-8 text-[#666d79]">
+              {copy.panelDescription}
+            </p>
 
-            <div className="mt-11 space-y-8">
-              <label className="block">
-                <span className="mb-3 block text-base font-semibold">{copy.emailLabel}</span>
-                <span className="flex h-12 items-center gap-3 rounded-lg border border-slate-300 px-4 text-slate-400 shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
-                  <Mail className="h-5 w-5 text-slate-700" />
-                  <input
-                    className="min-w-0 flex-1 bg-transparent text-base outline-none placeholder:text-slate-400"
-                    placeholder={copy.emailPlaceholder}
-                    type="email"
-                    disabled
-                  />
-                </span>
-              </label>
+            <div className="mt-10 space-y-8">
+              <FieldShell label={copy.emailLabel}>
+                <Mail className="h-5 w-5 text-[#5f6672]" />
+                <input
+                  className="min-w-0 flex-1 bg-transparent text-[16px] text-[#111111] outline-none placeholder:text-[#b2b7c1]"
+                  placeholder={copy.emailPlaceholder}
+                  type="email"
+                  disabled
+                />
+              </FieldShell>
 
-              <label className="block">
-                <span className="mb-3 flex items-center justify-between gap-3">
-                  <span className="text-base font-semibold">{copy.passwordLabel}</span>
-                  <button className="text-sm font-semibold text-blue-500" type="button" disabled>
+              <div>
+                <div className="mb-3 flex items-center justify-between gap-4">
+                  <span className="text-[15px] font-semibold text-[#111111]">{copy.passwordLabel}</span>
+                  <button type="button" disabled className="text-[13px] font-semibold text-[#4587ff]">
                     {copy.forgotPassword}
                   </button>
-                </span>
-                <span className="flex h-12 items-center gap-3 rounded-lg border border-slate-300 px-4 text-slate-400 shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
-                  <Lock className="h-5 w-5 text-slate-700" />
+                </div>
+                <div className="flex h-[44px] items-center gap-3 rounded-[10px] border border-[#d9dee7] px-4">
+                  <Lock className="h-5 w-5 text-[#5f6672]" />
                   <input
-                    className="min-w-0 flex-1 bg-transparent text-base outline-none placeholder:text-slate-400"
+                    className="min-w-0 flex-1 bg-transparent text-[16px] text-[#111111] outline-none placeholder:text-[#b2b7c1]"
                     placeholder={copy.passwordPlaceholder}
                     type="password"
                     disabled
                   />
-                  <Eye className="h-5 w-5 text-slate-700" />
-                </span>
-              </label>
+                  <Eye className="h-5 w-5 text-[#5f6672]" />
+                </div>
+              </div>
 
               <Button
                 onClick={handleGoogleSignIn}
-                disabled={isSigningIn || isLoading}
-                className="h-14 w-full rounded-lg bg-[#050608] text-base font-semibold text-white shadow-[0_10px_24px_rgba(0,0,0,0.14)] hover:bg-black"
+                disabled={isLoading}
+                className="h-[46px] w-full rounded-[10px] bg-[#050608] text-[16px] font-semibold text-white shadow-[0_10px_24px_rgba(0,0,0,0.14)] hover:bg-[#050608]/95"
               >
-                {isSigningIn ? copy.openingBrowser : copy.signInLabel}
+                {isLoading ? copy.openingBrowser : copy.submitLabel}
               </Button>
             </div>
 
-            {error ? (
-              <div className="mt-5 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm leading-6 text-red-700">
-                {error}
-              </div>
-            ) : null}
-
-            {authFlowStatus && !error ? (
-              <div className="mt-5 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm leading-6 text-slate-700">
+            {authFlowStatus ? (
+              <div className="mt-4 rounded-[10px] border border-[#e7ebf2] bg-[#fafbfc] px-4 py-3 text-[13px] leading-6 text-[#5c6470]">
                 {authFlowStatus}
               </div>
             ) : null}
 
-            <div className="my-9 flex items-center gap-7 text-sm text-slate-500">
-              <span className="h-px flex-1 bg-slate-200" />
+            <div className="my-8 flex items-center gap-6 text-[13px] text-[#707684]">
+              <span className="h-px flex-1 bg-[#e3e7ed]" />
               <span>{copy.dividerLabel}</span>
-              <span className="h-px flex-1 bg-slate-200" />
+              <span className="h-px flex-1 bg-[#e3e7ed]" />
             </div>
 
             <Button
               onClick={handleGoogleSignIn}
-              disabled={isSigningIn || isLoading}
-              className="h-14 w-full rounded-lg border border-slate-300 bg-white text-base font-semibold text-slate-900 hover:bg-slate-50"
+              disabled={isLoading}
+              className="h-[46px] w-full rounded-[10px] border border-[#d9dee7] bg-white text-[16px] font-semibold text-[#111111] hover:bg-[#f8fafc]"
             >
               <GoogleMark />
-              {isSigningIn ? copy.openingBrowser : copy.googleLabel}
+              {isLoading ? copy.openingBrowser : copy.googleLabel}
             </Button>
 
-            <p className="mt-11 text-center text-base text-slate-500">
+            <p className="mt-10 text-center text-[14px] text-[#707684]">
               {copy.signUpPrompt}
               <button
-                className="ml-3 font-semibold text-blue-500"
                 type="button"
                 onClick={handleGoogleSignIn}
-                disabled={isSigningIn || isLoading}
+                disabled={isLoading}
+                className="ml-3 font-semibold text-[#4587ff]"
               >
                 {copy.signUpLabel}
               </button>
@@ -315,21 +293,32 @@ export default function LoginPage({ appLocale }: { appLocale: AppLocale }) {
   );
 }
 
+function FieldShell({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <label className="block">
+      <span className="mb-3 block text-[15px] font-semibold text-[#111111]">{label}</span>
+      <span className="flex h-[44px] items-center gap-3 rounded-[10px] border border-[#d9dee7] px-4">
+        {children}
+      </span>
+    </label>
+  );
+}
+
 function FeatureItem({
   icon,
   title,
-  description,
+  body,
 }: {
-  icon: ReactNode;
+  icon: React.ReactNode;
   title: string;
-  description: string;
+  body: string;
 }) {
   return (
-    <div className="flex gap-5 border-slate-200 md:border-r md:pr-7 last:md:border-r-0">
-      <div className="shrink-0 text-slate-950">{icon}</div>
-      <div>
-        <h3 className="text-base font-semibold">{title}</h3>
-        <p className="mt-3 text-sm leading-7 text-slate-500">{description}</p>
+    <div className="flex gap-4 md:border-r md:border-[#e8e2d7] md:px-6 first:md:pl-0 last:md:border-r-0 last:md:pr-0">
+      <div className="shrink-0 pt-1 text-[#111111]">{icon}</div>
+      <div className="min-w-0">
+        <h3 className="text-[14px] font-semibold text-[#111111]">{title}</h3>
+        <p className="mt-2 text-[13px] leading-7 text-[#707684]">{body}</p>
       </div>
     </div>
   );
@@ -337,7 +326,7 @@ function FeatureItem({
 
 function GoogleMark() {
   return (
-    <svg className="mr-3 h-6 w-6" viewBox="0 0 24 24" aria-hidden="true">
+    <svg className="mr-3 h-5 w-5" viewBox="0 0 24 24" aria-hidden="true">
       <path
         fill="#4285F4"
         d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"

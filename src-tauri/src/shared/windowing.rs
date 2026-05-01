@@ -34,8 +34,8 @@ pub fn position_window_bottom_center(
 }
 
 pub fn resize_overlay_window(window: &WebviewWindow, width: f64, height: f64) {
-    let physical_width = width.max(320.0).round() as u32;
-    let physical_height = height.max(160.0).round() as u32;
+    let physical_width = width.max(1.0).round() as u32;
+    let physical_height = height.max(1.0).round() as u32;
     let _ = window.set_size(tauri::Size::Physical(tauri::PhysicalSize {
         width: physical_width,
         height: physical_height,

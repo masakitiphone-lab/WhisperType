@@ -23,7 +23,7 @@ Core flow:
 
 - Google sign-in opens in the external browser.
 - Desktop callback uses `whispertype://auth/callback`.
-- Local development may still use `http://localhost:1420/auth/callback` as a browser handoff page.
+- Local development uses `whispertype://auth/callback` for the native app handoff.
 - Session restore is optimized for reliable auto-login.
 - Current implementation uses browser storage for Supabase auth persistence and also keeps Tauri-side token helpers for desktop flows.
 
@@ -77,7 +77,7 @@ Development URLs:
 
 Supabase redirect allow-list should include:
 - `whispertype://auth/callback`
-- `http://localhost:1420/auth/callback` only if local browser handoff is still needed
+- `http://localhost:1420/auth/callback` only if you want a browser fallback page during local testing
 
 ## Database Assumptions
 

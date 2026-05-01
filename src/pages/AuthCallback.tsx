@@ -1,4 +1,6 @@
 ﻿import { useEffect, useState } from "react";
+import { motion, AnimatePresence } from "motion/react";
+import { CheckCircle2, XCircle, Loader2, ArrowRight, X } from "lucide-react";
 import { desktopAuthRedirectUrl } from "@/lib/auth";
 import { readAppLocale, type AppLocale } from "@/lib/appLocale";
 
@@ -12,6 +14,9 @@ type CallbackCopy = {
   retryLabel: string;
   errorTitle: string;
   errorDescription: string;
+  step1: string;
+  step2: string;
+  step3: string;
 };
 
 function getCallbackCopy(locale: AppLocale): CallbackCopy {
@@ -19,11 +24,14 @@ function getCallbackCopy(locale: AppLocale): CallbackCopy {
     return {
       eyebrow: "AUTHENTICATION",
       title: "ログインが完了しました",
-      description: "WhisperType に戻っています。アプリ側でそのまま続けてください。",
-      closeHint: "このブラウザタブは閉じて問題ありません。",
+      description: "WhisperType に戻っています。このままアプリをご利用ください。",
+      closeHint: "このタブは自動で閉じます。閉じない場合は手動で閉じてください。",
       retryLabel: "アプリに戻る",
       errorTitle: "ログインを完了できませんでした",
       errorDescription: "アプリからもう一度ログインをお試しください。",
+      step1: "認証成功",
+      step2: "アプリに接続中",
+      step3: "完了",
     };
   }
 
@@ -31,11 +39,14 @@ function getCallbackCopy(locale: AppLocale): CallbackCopy {
     return {
       eyebrow: "AUTHENTICATION",
       title: "Inicio de sesion completado",
-      description: "WhisperType esta volviendo a la app. Contin?a alli.",
-      closeHint: "Ya puedes cerrar esta pesta?a del navegador.",
+      description: "WhisperType esta volviendo a la app. Continua alli.",
+      closeHint: "Esta pestana se cerrara automaticamente.",
       retryLabel: "Volver a la app",
       errorTitle: "No se pudo completar el inicio de sesion",
       errorDescription: "Vuelve a intentarlo desde la app.",
+      step1: "Autenticado",
+      step2: "Conectando a la app",
+      step3: "Listo",
     };
   }
 
@@ -43,12 +54,24 @@ function getCallbackCopy(locale: AppLocale): CallbackCopy {
     eyebrow: "AUTHENTICATION",
     title: "Authentication complete",
     description: "WhisperType is returning you to the app. Continue there.",
-    closeHint: "You can close this browser tab.",
+    closeHint: "This tab will close automatically.",
     retryLabel: "Return to the app",
     errorTitle: "Authentication could not be completed",
     errorDescription: "Please try signing in again from the app.",
+    step1: "Authenticated",
+    step2: "Connecting to app",
+    step3: "Complete",
   };
 }
+
+const stepVariants = {
+  hidden: { opacity: 0, y: 12 },
+  visible: (i: number) => ({
+    opacity: 1,
+    y: 0,
+    transition: { delay: i * 0.15 + 0.3, duration: 0.4, ease: "easeOut" },
+  }),
+};
 
 export default function AuthCallback() {
   const [state, setState] = useState<CallbackState>("redirecting");
@@ -67,53 +90,207 @@ export default function AuthCallback() {
       return;
     }
 
+    // 1. まずアプリにディープリンクで戻る
     try {
       window.location.href = desktopCallbackUrl;
-      window.setTimeout(() => {
-        setState(hasError ? "error" : "complete");
-      }, 900);
     } catch {
-      setState(hasError ? "error" : "complete");
+      // ignore
     }
+
+    // 2. 少し待ってからタブを自動で閉じようと試みる
+    window.setTimeout(() => {
+      try {
+        window.close();
+      } catch {
+        // ブラウザがブロックした場合は無視
+      }
+      // 3. 閉じられなかったら完了画面を表示する
+      setState(hasError ? "error" : "complete");
+    }, 900);
   }, [desktopCallbackUrl, search]);
 
-  const title = state === "error" ? copy.errorTitle : copy.title;
-  const description = state === "error" ? copy.errorDescription : copy.description;
+  const isError = state === "error";
 
   return (
-    <div className="min-h-screen bg-[#f3efe7] px-6 py-8 text-slate-900">
-      <div className="mx-auto flex min-h-[calc(100vh-4rem)] max-w-3xl items-center justify-center">
-        <div className="w-full max-w-xl overflow-hidden rounded-[32px] border border-white/70 bg-white/95 shadow-[0_30px_90px_rgba(15,23,42,0.14)] backdrop-blur-sm">
-          <div className="bg-[linear-gradient(145deg,rgba(15,23,42,0.98),rgba(27,37,55,0.95))] px-8 py-8 text-white">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-white/60">
+    <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-[#0f1117] px-6 py-8 text-slate-100">
+      {/* 背景の装飾 */}
+      <div className="pointer-events-none absolute inset-0 overflow-hidden">
+        <div className="absolute -top-1/2 -left-1/4 h-[800px] w-[800px] rounded-full bg-indigo-500/10 blur-[120px]" />
+        <div className="absolute -right-1/4 -bottom-1/2 h-[600px] w-[600px] rounded-full bg-emerald-500/8 blur-[100px]" />
+      </div>
+
+      <motion.div
+        initial={{ opacity: 0, scale: 0.96 }}
+        animate={{ opacity: 1, scale: 1 }}
+        transition={{ duration: 0.5, ease: "easeOut" }}
+        className="relative z-10 w-full max-w-md"
+      >
+        {/* カード */}
+        <div className="overflow-hidden rounded-3xl border border-white/[0.08] bg-white/[0.03] shadow-2xl backdrop-blur-xl">
+          {/* ヘッダー部分 */}
+          <div className="relative flex flex-col items-center px-8 pt-10 pb-8">
+            {/* アイコン */}
+            <AnimatePresence mode="wait">
+              {isError ? (
+                <motion.div
+                  key="error"
+                  initial={{ scale: 0, rotate: -45 }}
+                  animate={{ scale: 1, rotate: 0 }}
+                  transition={{ type: "spring", stiffness: 200, damping: 15 }}
+                  className="mb-6 flex h-16 w-16 items-center justify-center rounded-2xl bg-red-500/15"
+                >
+                  <XCircle className="h-8 w-8 text-red-400" />
+                </motion.div>
+              ) : (
+                <motion.div
+                  key="success"
+                  initial={{ scale: 0 }}
+                  animate={{ scale: 1 }}
+                  transition={{ type: "spring", stiffness: 200, damping: 15 }}
+                  className="mb-6 flex h-16 w-16 items-center justify-center rounded-2xl bg-emerald-500/15"
+                >
+                  <CheckCircle2 className="h-8 w-8 text-emerald-400" />
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            <motion.p
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 0.1 }}
+              className="text-[11px] font-semibold uppercase tracking-[0.24em] text-slate-400"
+            >
               {copy.eyebrow}
-            </p>
-            <h1 className="mt-3 text-3xl font-semibold tracking-[-0.04em]">WhisperType</h1>
-            <p className="mt-3 text-sm leading-7 text-white/78">{description}</p>
+            </motion.p>
+
+            <motion.h1
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.2 }}
+              className="mt-3 text-2xl font-semibold tracking-tight"
+            >
+              {isError ? copy.errorTitle : copy.title}
+            </motion.h1>
+
+            <motion.p
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 0.3 }}
+              className="mt-2 text-center text-sm leading-relaxed text-slate-400"
+            >
+              {isError ? copy.errorDescription : copy.description}
+            </motion.p>
           </div>
 
-          <div className="space-y-5 px-8 py-8">
-            <div className="flex items-center gap-4 rounded-[24px] border border-black/6 bg-[#f7f4ee] px-5 py-4">
-              <div className={`h-11 w-11 rounded-full ${state === "error" ? "bg-red-100" : "bg-emerald-100"}`} />
-              <div>
-                <p className="text-base font-semibold text-slate-950">{title}</p>
-                <p className="mt-1 text-sm leading-6 text-slate-600">{copy.closeHint}</p>
-              </div>
-            </div>
+          {/* ステップ表示 */}
+          <div className="space-y-3 px-8 pb-8">
+            {[copy.step1, copy.step2, copy.step3].map((label, i) => {
+              const isActive = !isError && (i === 0 || i === 1 || i === 2);
+              const isCurrent = !isError && i === 1 && state === "redirecting";
+              const isDone = !isError && i === 0;
+              const isLast = i === 2;
 
-            <button
-              type="button"
-              onClick={() => {
-                window.location.href = desktopCallbackUrl;
-              }}
-              className="inline-flex h-11 items-center justify-center rounded-2xl bg-black px-5 text-sm font-medium text-white transition hover:bg-black/90"
+              return (
+                <motion.div
+                  key={label}
+                  custom={i}
+                  initial="hidden"
+                  animate="visible"
+                  variants={stepVariants}
+                  className={`flex items-center gap-3 rounded-2xl border px-4 py-3.5 transition-colors ${
+                    isError
+                      ? "border-white/[0.05] bg-white/[0.02] opacity-40"
+                      : isDone
+                        ? "border-emerald-500/20 bg-emerald-500/[0.06]"
+                        : isCurrent
+                          ? "border-indigo-500/20 bg-indigo-500/[0.06]"
+                          : "border-white/[0.05] bg-white/[0.02]"
+                  }`}
+                >
+                  <div
+                    className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-bold ${
+                      isError
+                        ? "bg-white/[0.05] text-slate-500"
+                        : isDone
+                          ? "bg-emerald-500/20 text-emerald-400"
+                          : isCurrent
+                            ? "bg-indigo-500/20 text-indigo-400"
+                            : "bg-white/[0.05] text-slate-400"
+                    }`}
+                  >
+                    {isDone ? (
+                      <CheckCircle2 className="h-4 w-4" />
+                    ) : isCurrent && state === "redirecting" ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      isLast && state === "complete" ? (
+                        <CheckCircle2 className="h-4 w-4" />
+                      ) : (
+                        i + 1
+                      )
+                    )}
+                  </div>
+                  <span
+                    className={`text-sm font-medium ${
+                      isError
+                        ? "text-slate-500"
+                        : isDone || isCurrent
+                          ? "text-slate-200"
+                          : "text-slate-400"
+                    }`}
+                  >
+                    {label}
+                  </span>
+                  {isCurrent && !isError && (
+                    <motion.div
+                      initial={{ opacity: 0, x: -4 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      className="ml-auto"
+                    >
+                      <ArrowRight className="h-4 w-4 text-indigo-400" />
+                    </motion.div>
+                  )}
+                </motion.div>
+              );
+            })}
+
+            {/* ボタン or ヒント */}
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 0.8 }}
+              className="pt-2"
             >
-              {copy.retryLabel}
-            </button>
+              {isError ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    window.location.href = desktopCallbackUrl;
+                  }}
+                  className="flex h-12 w-full items-center justify-center gap-2 rounded-2xl bg-white/[0.08] px-5 text-sm font-medium text-white transition hover:bg-white/[0.12]"
+                >
+                  <ArrowRight className="h-4 w-4" />
+                  {copy.retryLabel}
+                </button>
+              ) : (
+                <p className="text-center text-xs leading-relaxed text-slate-500">
+                  {copy.closeHint}
+                </p>
+              )}
+            </motion.div>
           </div>
         </div>
-      </div>
+
+        {/* フッターロゴ */}
+        <motion.p
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 1 }}
+          className="mt-8 text-center text-xs font-medium tracking-wide text-slate-600"
+        >
+          WhisperType
+        </motion.p>
+      </motion.div>
     </div>
   );
 }
-

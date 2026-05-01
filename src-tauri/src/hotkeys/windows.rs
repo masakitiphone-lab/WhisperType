@@ -1,5 +1,5 @@
 use super::{BindingToken, HotkeyBackend, HotkeyBackendInfo, HotkeyBinding};
-use crate::{ensure_overlay_window, shared::log::append_log_line};
+use crate::{ensure_overlay_window, restore_main_window, shared::log::append_log_line, AppState};
 use std::{
     collections::HashSet,
     sync::{
@@ -133,6 +133,16 @@ fn handle_binding_state(state: &Arc<HookSharedState>) {
 
 fn start_overlay_session(state: &Arc<HookSharedState>, required_group_count: usize) {
     if let Some(app_handle) = state.app_handle.lock().unwrap().clone() {
+        // Require authentication before starting recording
+        if let Ok(app_state) = app_handle.state::<AppState>().cached_access_token.lock() {
+            if app_state.is_none() {
+                append_log_line("[Shortcut] rejected: no cached access token (user not signed in)");
+                restore_main_window(&app_handle);
+                app_handle.emit("auth-required", ()).ok();
+                return;
+            }
+        }
+
         let binding = state.binding_label.lock().unwrap().clone();
         append_log_line(&format!(
             "[Shortcut] start binding={} required_groups={}",

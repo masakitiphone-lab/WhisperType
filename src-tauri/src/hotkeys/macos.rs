@@ -552,6 +552,15 @@ fn emit_native_binding_transition() {
     };
 
     if is_active {
+        // Require authentication before starting recording
+        if let Ok(app_state) = app_handle.state::<crate::AppState>().cached_access_token.lock() {
+            if app_state.is_none() {
+                crate::shared::log::append_log_line("[Shortcut] rejected: no cached access token (user not signed in)");
+                crate::restore_main_window(&app_handle);
+                app_handle.emit("auth-required", ()).ok();
+                return;
+            }
+        }
         app_handle.emit("recording-started", ()).ok();
     } else {
         app_handle.emit("recording-stopped", ()).ok();

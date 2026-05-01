@@ -1,5 +1,5 @@
 const releaseAuthRedirectUrl = "whispertype://auth/callback";
-const devAuthRedirectUrl = "http://localhost:1420/auth/callback";
+const devAuthRedirectUrl = "whispertype://auth/callback";
 
 const defaultAuthRedirectUrl = import.meta.env.DEV
   ? devAuthRedirectUrl

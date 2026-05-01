@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { Navigate, Route, Routes } from "react-router-dom";
+import { listen } from "@tauri-apps/api/event";
+import { Navigate, Route, Routes, useNavigate } from "react-router-dom";
 import OnboardingModal from "@/components/OnboardingModal";
 import TutorialPracticeModal from "@/components/TutorialPracticeModal";
 import { WelcomeCreditsCelebration } from "@/components/WelcomeCreditsCelebration";
@@ -48,6 +49,7 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 
 export default function App() {
   const { user, isLoading, refreshProfile } = useAuth();
+  const navigate = useNavigate();
   const [appLocale, setAppLocale] = useState<AppLocale>(() => readAppLocale());
   const [isOnboardingOpen, setIsOnboardingOpen] = useState(false);
   const [isPracticeOpen, setIsPracticeOpen] = useState(false);
@@ -170,6 +172,23 @@ export default function App() {
     setIsPracticeOpen(false);
     setIsOnboardingOpen(Boolean(user));
   };
+
+  useEffect(() => {
+    let unlistenAuthRequired: (() => void) | undefined;
+
+    void (async () => {
+      unlistenAuthRequired = await listen("auth-required", () => {
+        if (!user) {
+          void invoke("show_settings_window").catch(() => {});
+          navigate("/login", { replace: true });
+        }
+      });
+    })();
+
+    return () => {
+      unlistenAuthRequired?.();
+    };
+  }, [navigate, user]);
 
   useEffect(() => {
     try {

@@ -76,7 +76,6 @@ function isTokenUsable(accessToken: string | null | undefined, skewSeconds = 60)
 }
 
 async function getUsableAccessToken() {
-  const authStart = nowMs();
   try {
     const cachedToken = await invoke<string | null>("get_cached_access_token");
     if (isTokenUsable(cachedToken)) {

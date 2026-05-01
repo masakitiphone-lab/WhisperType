@@ -11,8 +11,6 @@
   },
   "dependencies": {
     "@radix-ui/react-slot": "^1.2.4",
-    "@stripe/react-stripe-js": "^6.3.0",
-    "@stripe/stripe-js": "^9.3.1",
     "@supabase/supabase-js": "^2.98.0",
     "@tauri-apps/api": "^2",
     "@tauri-apps/plugin-opener": "^2",

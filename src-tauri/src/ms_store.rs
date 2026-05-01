@@ -2,12 +2,8 @@
 ///
 /// To enable real Store purchases, uncomment the `Services_Store` feature in
 /// Cargo.toml and implement the WinRT calls below.
-///
-/// For now this module returns a safe fallback so the app compiles and runs
-/// whether it is distributed via the Microsoft Store or as a standalone
-/// installer.
 
-const CHECKOUT_PROVIDER: &str = "stripe"; // Change to "ms-store" for Store builds
+const CHECKOUT_PROVIDER: &str = "ms-store";
 
 #[derive(Clone, serde::Serialize)]
 pub struct CheckoutProviderInfo {
@@ -36,7 +32,6 @@ pub async fn purchase_plus_via_store() -> Result<bool, String> {
     //     .map_err(|e| e.to_string())?;
     // Ok(result.Status().unwrap() == StorePurchaseStatus::Succeeded)
     //
-    // For standalone builds, return an error directing the user to Stripe.
     Err("Microsoft Store purchase is not available in this build.".to_string())
 }
 

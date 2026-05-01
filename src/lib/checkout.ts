@@ -17,5 +17,6 @@ export async function getCheckoutProvider(): Promise<CheckoutProvider> {
 }
 
 export async function isMicrosoftStoreBuild(): Promise<boolean> {
-  return true;
+  const provider = await getCheckoutProvider();
+  return provider === "ms-store";
 }

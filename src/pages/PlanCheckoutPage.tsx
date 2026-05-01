@@ -1,11 +1,12 @@
-import { ChevronLeft, ShieldCheck } from "lucide-react";
-import { useState } from "react";
+import { ChevronLeft, ShieldCheck, RefreshCw } from "lucide-react";
+import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { AppShell } from "@/components/AppShell";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useAuth } from "@/contexts/useAuth";
 import type { AppLocale } from "@/lib/appLocale";
+import { getCheckoutProvider, isMicrosoftStoreBuild } from "@/lib/checkout";
 import { invoke } from "@tauri-apps/api/core";
 
 type PlanKey = "free" | "plus";
@@ -108,6 +109,43 @@ export default function PlanCheckoutPage({ appLocale }: { appLocale: AppLocale }
   const copy = COPY[appLocale];
   const [isPurchasing, setIsPurchasing] = useState(false);
   const [purchaseError, setPurchaseError] = useState("");
+  const [checkoutProvider, setCheckoutProvider] = useState<"ms-store" | null>(null);
+  const [isStoreBuild, setIsStoreBuild] = useState(false);
+  const [hasStoreLicense, setHasStoreLicense] = useState<boolean | null>(null);
+  const [isRefreshingLicense, setIsRefreshingLicense] = useState(false);
+
+  useEffect(() => {
+    void (async () => {
+      try {
+        const [provider, storeBuild, license] = await Promise.all([
+          getCheckoutProvider(),
+          isMicrosoftStoreBuild(),
+          invoke<boolean>("check_plus_store_license").catch(() => null),
+        ]);
+
+        setCheckoutProvider(provider);
+        setIsStoreBuild(storeBuild);
+        setHasStoreLicense(license);
+      } catch (error) {
+        console.error("Failed to load checkout status:", error);
+      }
+    })();
+  }, []);
+
+  const refreshLicense = async () => {
+    setIsRefreshingLicense(true);
+    try {
+      const license = await invoke<boolean>("check_plus_store_license");
+      setHasStoreLicense(license);
+      if (license) {
+        await refreshProfile();
+      }
+    } catch (error) {
+      console.error("Failed to refresh Store license:", error);
+    } finally {
+      setIsRefreshingLicense(false);
+    }
+  };
 
   const handleStorePurchase = async () => {
     setIsPurchasing(true);
@@ -186,6 +224,33 @@ export default function PlanCheckoutPage({ appLocale }: { appLocale: AppLocale }
                   <p className="mt-1 font-medium text-slate-900 dark:text-slate-100">{profile.email}</p>
                 </div>
               ) : null}
+
+              <div className="rounded-[20px] border border-black/8 bg-white/70 p-4 text-sm text-slate-600 dark:border-white/8 dark:bg-white/5 dark:text-slate-300">
+                <p className="text-xs uppercase tracking-[0.18em] text-slate-400">Store</p>
+                <p className="mt-1 font-medium text-slate-900 dark:text-slate-100">
+                  {checkoutProvider === "ms-store" ? "Microsoft Store billing" : "Billing unavailable"}
+                </p>
+                <p className="mt-2">
+                  {isStoreBuild
+                    ? appLocale === "ja"
+                      ? "このビルドは Microsoft Store 決済を使えます。"
+                      : "This build can use Microsoft Store billing."
+                    : appLocale === "ja"
+                      ? "このビルドでは Store 決済は無効です。"
+                      : "Microsoft Store billing is unavailable in this build."}
+                </p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <Button type="button" variant="outline" size="sm" onClick={() => void refreshLicense()} disabled={isRefreshingLicense}>
+                    <RefreshCw className={`h-4 w-4 ${isRefreshingLicense ? "animate-spin" : ""}`} />
+                    {appLocale === "ja" ? "ライセンス更新" : "Refresh license"}
+                  </Button>
+                  {hasStoreLicense ? (
+                    <span className="inline-flex items-center rounded-full bg-emerald-500/10 px-3 py-1 text-xs font-medium text-emerald-700 dark:text-emerald-300">
+                      {appLocale === "ja" ? "Plus 所有済み" : "Plus owned"}
+                    </span>
+                  ) : null}
+                </div>
+              </div>
             </div>
 
             <div className="flex justify-center">
@@ -205,7 +270,7 @@ export default function PlanCheckoutPage({ appLocale }: { appLocale: AppLocale }
                   <div className="space-y-3">
                     <Button
                       type="button"
-                      disabled={isPurchasing}
+                      disabled={isPurchasing || !isStoreBuild}
                       onClick={handleStorePurchase}
                       className="h-12 w-full rounded-2xl bg-black text-white hover:bg-black/90 dark:bg-white dark:text-black dark:hover:bg-white/90"
                     >
@@ -213,6 +278,13 @@ export default function PlanCheckoutPage({ appLocale }: { appLocale: AppLocale }
                     </Button>
                     {purchaseError ? (
                       <p className="text-xs text-rose-600 dark:text-rose-300">{purchaseError}</p>
+                    ) : null}
+                    {!isStoreBuild ? (
+                      <p className="text-xs text-slate-500 dark:text-slate-400">
+                        {appLocale === "ja"
+                          ? "ローカル実行では購入できません。Microsoft Store 配布版で確認してください。"
+                          : "Local runs cannot complete purchase. Use the Microsoft Store build."}
+                      </p>
                     ) : null}
                   </div>
                 </div>

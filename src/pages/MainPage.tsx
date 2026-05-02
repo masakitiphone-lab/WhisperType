@@ -115,6 +115,7 @@ export default function MainPage({
     let unlistenFinished: (() => void) | undefined;
     listen("transcription-finished", () => {
       void fetchRecentHistory();
+      void refreshProfile();
     }).then((fn) => {
       unlistenFinished = fn;
     });

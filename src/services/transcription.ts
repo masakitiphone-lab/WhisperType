@@ -1,11 +1,13 @@
 import { invoke } from "@tauri-apps/api/core";
 import { supabase } from "@/lib/supabase";
 import { preprocessAudioBlobForTranscription } from "@/lib/audioPreprocess";
+import { hasLocalPlusLicense } from "@/lib/storeLicense";
 import { buildTranscriptionSettingsPayload, readTranscriptionSettings } from "@/lib/transcription";
 import { getAudioFileName } from "@/services/audio";
 
 type TranscriptionResponse = {
   text: string;
+  remaining_credits?: number;
 };
 
 type TranscriptionContext = {
@@ -148,13 +150,15 @@ async function getTranscriptionContext(userId: string): Promise<TranscriptionCon
     throw new Error("profile_unavailable");
   }
 
+  const hasStorePlus = await hasLocalPlusLicense();
+
   return {
     user_id: row.user_id,
     credits: row.credits ?? 0,
     daily_credits: row.daily_credits ?? 50,
-    available_credits: row.available_credits,
-    plan: row.plan === "plus" ? "plus" : "free",
-    is_unlimited: Boolean(row.is_unlimited),
+    available_credits: hasStorePlus ? null : row.available_credits,
+    plan: hasStorePlus || row.plan === "plus" ? "plus" : "free",
+    is_unlimited: hasStorePlus || Boolean(row.is_unlimited),
   };
 }
 
@@ -301,11 +305,18 @@ export async function transcribeAudio(audioBlob: Blob): Promise<string> {
     if (!text) {
       throw new Error("empty_transcription");
     }
+    // Clear prefetch so the next transcription fetches fresh credit state
+    cachedPrefetch = null;
     return text;
   } catch (error) {
     const errorCode = error instanceof Error ? error.message : "transcription_failed";
 
     if (errorCode === "silent_audio") {
+      throw new Error(errorCode);
+    }
+
+    if (errorCode === "insufficient_credits") {
+      cachedPrefetch = null;
       throw new Error(errorCode);
     }
 
@@ -315,6 +326,8 @@ export async function transcribeAudio(audioBlob: Blob): Promise<string> {
       if (!retryText) {
         throw new Error("empty_transcription");
       }
+      // Clear prefetch after successful retry as well
+      cachedPrefetch = null;
       return retryText;
     }
 

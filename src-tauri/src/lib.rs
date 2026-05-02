@@ -39,7 +39,7 @@ use shared::hotkey_events::{
 use std::sync::Mutex;
 #[cfg(target_os = "windows")]
 use std::process::Command;
-use ms_store::{check_plus_store_license, get_checkout_provider, purchase_plus_via_store};
+use ms_store::{check_plus_store_license, get_checkout_provider, is_store_build, purchase_plus_via_store};
 use secure_storage::{secure_storage_delete, secure_storage_get, secure_storage_set};
 
 #[derive(Clone, serde::Serialize)]
@@ -495,6 +495,7 @@ pub fn run() {
             secure_storage_set,
             secure_storage_delete,
             get_checkout_provider,
+            is_store_build,
             purchase_plus_via_store,
             check_plus_store_license,
         ])

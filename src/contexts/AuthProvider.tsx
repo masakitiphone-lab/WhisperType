@@ -6,6 +6,7 @@ import type { Session, User } from "@supabase/supabase-js";
 import { readAppLocale } from "@/lib/appLocale";
 import { authRedirectUrl } from "@/lib/auth";
 import { readStoredAuthSessionSnapshot } from "@/lib/authStorage";
+import { hasLocalPlusLicense } from "@/lib/storeLicense";
 import { supabase } from "@/lib/supabase";
 import { getAuthFlowCopy } from "./authFlowCopy";
 import { AuthContext, type UserProfile } from "./AuthContext";
@@ -176,10 +177,46 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const refreshProfile = async () => {
-    if (user) {
-      const nextProfile = await ensureProfileWithRetry(user);
-      setProfile(nextProfile ?? buildFallbackProfile(user));
+    if (!user) return;
+    const nextProfile = await ensureProfileWithRetry(user);
+    const baseProfile = nextProfile ?? buildFallbackProfile(user);
+    const hasStorePlus = await hasLocalPlusLicense(true);
+
+    // Ensure daily credits refresh is reflected by calling get_transcription_context
+    try {
+      const { data, error } = await supabase.rpc("get_transcription_context");
+      const row = (Array.isArray(data) ? data[0] : data) as
+        | {
+            user_id: string;
+            credits: number | null;
+            daily_credits: number | null;
+            available_credits: number | null;
+            plan: string | null;
+            is_unlimited: boolean | null;
+          }
+        | null;
+
+      if (!error && row && row.user_id === user.id) {
+        setProfile({
+          ...baseProfile,
+          credits: row.credits ?? baseProfile.credits,
+          dailyCredits: row.daily_credits ?? baseProfile.dailyCredits,
+          availableCredits: hasStorePlus || row.is_unlimited
+            ? null
+            : (row.available_credits ?? baseProfile.availableCredits),
+          plan: hasStorePlus || row.plan === "plus" ? "plus" : baseProfile.plan,
+        });
+        return;
+      }
+    } catch (e) {
+      console.warn("Failed to refresh transcription context:", e);
     }
+
+    setProfile({
+      ...baseProfile,
+      availableCredits: hasStorePlus ? null : baseProfile.availableCredits,
+      plan: hasStorePlus ? "plus" : baseProfile.plan,
+    });
   };
 
   const ensureProfileWithRetry = async (

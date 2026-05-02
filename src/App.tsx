@@ -11,6 +11,7 @@ import { normalizeHotkeyForDisplay, normalizeHotkeyForNative } from "@/lib/hotke
 import { readAppSettings, writeAppSettings } from "@/lib/appSettings";
 import { supabase } from "@/lib/supabase";
 import AuthCallback from "@/pages/AuthCallback";
+import { PrivacyPage, TermsPage } from "@/pages/LegalPages";
 import LoginPage from "@/pages/LoginPage";
 import MainPage from "@/pages/MainPage";
 import PlanCheckoutPage from "@/pages/PlanCheckoutPage";
@@ -211,6 +212,8 @@ export default function App() {
     <>
       <Routes>
         <Route path="/login" element={<LoginPage appLocale={appLocale} />} />
+        <Route path="/privacy" element={<PrivacyPage appLocale={appLocale} />} />
+        <Route path="/terms" element={<TermsPage appLocale={appLocale} />} />
         <Route path="/auth/callback" element={<AuthCallback />} />
         <Route
           path="/"

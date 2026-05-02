@@ -13,9 +13,9 @@
     "windows": [
       {
         "title": "WhisperType",
-        "width": 1040,
-        "height": 780,
-        "minWidth": 900,
+        "width": 1100,
+        "height": 760,
+        "minWidth": 1100,
         "minHeight": 680,
         "center": true,
         "visible": false

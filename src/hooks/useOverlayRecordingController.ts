@@ -266,6 +266,9 @@ export function useOverlayRecordingController() {
         await invoke("start_transcription");
         const text = await transcribeAudio(recordedBlob);
         queueTranscriptionPaste(text);
+        void prefetchTranscriptionReadiness().catch((err) => {
+          console.warn("Post-transcription prefetch failed:", err);
+        });
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error);
         if (errorMessage.toLowerCase() === "silent_audio") {

@@ -148,7 +148,7 @@ export function WaveformStrip({
         <div
           style={{
             position: "absolute",
-            left: `${getWaveformLeftOffset(capsuleWidth, WAVEFORM_BAR_STRIP_WIDTH)}px`,
+            left: `${getWaveformLeftOffset()}px`,
             top: "50%",
             transform: "translateY(-50%)",
             display: "flex",

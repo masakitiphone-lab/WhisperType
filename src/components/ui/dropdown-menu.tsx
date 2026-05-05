@@ -22,6 +22,8 @@ function DropdownMenu({ children }: { children: ReactNode }) {
 
   useLayoutEffect(() => {
     if (!open) return;
+    let frame = 0;
+
     const updatePosition = () => {
       const rect = triggerRef.current?.getBoundingClientRect();
       if (!rect) return;
@@ -35,13 +37,22 @@ function DropdownMenu({ children }: { children: ReactNode }) {
       });
     };
 
-    updatePosition();
+    const scheduleUpdate = () => {
+      if (frame) return;
+      frame = window.requestAnimationFrame(() => {
+        frame = 0;
+        updatePosition();
+      });
+    };
+
+    scheduleUpdate();
     setMounted(true);
-    window.addEventListener("resize", updatePosition);
-    window.addEventListener("scroll", updatePosition, true);
+    window.addEventListener("resize", scheduleUpdate);
+    window.addEventListener("scroll", scheduleUpdate, true);
     return () => {
-      window.removeEventListener("resize", updatePosition);
-      window.removeEventListener("scroll", updatePosition, true);
+      if (frame) window.cancelAnimationFrame(frame);
+      window.removeEventListener("resize", scheduleUpdate);
+      window.removeEventListener("scroll", scheduleUpdate, true);
     };
   }, [open]);
 

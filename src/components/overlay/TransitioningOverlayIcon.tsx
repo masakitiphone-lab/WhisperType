@@ -34,29 +34,29 @@ export function TransitioningOverlayIcon({
     <motion.div
       initial={false}
       animate={{
-        x,
+        left: x,
         y: 0,
         rotate: travelRotate,
         opacity: 1,
       }}
       transition={{
-        x: { duration: reduceMotion ? 0.24 : isClosing ? 0.11 : isExpanding ? 0.28 : 0.16, ease: TRANSITION_EASE },
+        left: { duration: reduceMotion ? 0.24 : isClosing ? 0.11 : isExpanding ? 0.28 : 0.16, ease: TRANSITION_EASE },
         rotate: { duration: reduceMotion ? 0.24 : isClosing ? 0.11 : isExpanding ? 0.28 : 0.16, ease: TRANSITION_EASE },
         y: { duration: reduceMotion ? 0.1 : 0.14, ease: TRANSITION_EASE },
         opacity: { duration: 0, ease: TRANSITION_EASE },
       }}
       style={{
         position: "absolute",
-        left: "0px",
+        left: `${x}px`,
         top: "50%",
         width: `${iconSize}px`,
         height: `${height}px`,
         display: "grid",
         placeItems: "center",
         zIndex: 12,
-        willChange: "transform, opacity",
-        transform: "translateZ(0)",
-        marginTop: `${-height / 2}px`,
+        willChange: "left, transform, opacity",
+        x: "-50%",
+        translateY: "-50%",
       }}
     >
       {show ? <OverlayIconGlyph innerSize={innerSize} reduceMotion={reduceMotion} rotate={rotateInfinite} center opacity={1} /> : null}

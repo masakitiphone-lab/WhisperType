@@ -4,6 +4,10 @@ pub fn emit_recording_started(app: &AppHandle) {
     let _ = app.emit("recording-started", ());
 }
 
+pub fn emit_transcription_prefetch(app: &AppHandle) {
+    let _ = app.emit("transcription-prefetch", ());
+}
+
 pub fn emit_recording_stopped(app: &AppHandle) {
     let _ = app.emit("recording-stopped", ());
 }

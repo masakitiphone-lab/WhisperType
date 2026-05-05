@@ -1,7 +1,7 @@
 ﻿import { useEffect, useMemo, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
-import { Check, ChevronDown, Home, SlidersHorizontal } from "lucide-react";
+import { Check, ChevronDown, Home, Mic, Play, Square, SlidersHorizontal } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
 import { HotkeyRecorder } from "@/components/HotkeyRecorder";
 import { Button } from "@/components/ui/button";
@@ -17,12 +17,16 @@ import { requestPreferredAudioStream } from "@/lib/audioCapture";
 import { DEFAULT_TRANSCRIPTION_PROMPT, ENGLISH_TRANSCRIPTION_PROMPT, JAPANESE_TRANSCRIPTION_PROMPT } from "@/lib/transcription";
 import { supabase } from "@/lib/supabase";
 import { DEFAULT_HOTKEY, LANGUAGE_OPTIONS, MODEL_OPTIONS, getUiCopy, type HotkeyBackendInfo } from "@/pages/settingsPageData";
-import waveformGradientImage from "@/assets/waveform-gradient.png";
 import { useNavigate } from "react-router-dom";
 import { MainPageHeaderActions } from "@/pages/MainPageHeaderActions";
 import { MainPageHistorySection } from "@/pages/MainPageHistorySection";
 import { MainPagePlanSection } from "@/pages/MainPagePlanSection";
 import { GLASS_CARD, GLASS_PANEL, NAV_ITEMS, type MainPageSectionId, type PromoResult, type PromoRpcRow, type RecentHistoryItem } from "@/pages/mainPageTypes";
+
+type AudioInput = {
+  deviceId: string;
+  label: string;
+};
 
 export default function MainPage({
   appLocale,
@@ -50,11 +54,19 @@ export default function MainPage({
   const [celebrationCredits, setCelebrationCredits] = useState<number | null>(null);
   const [isLocaleMenuOpen, setIsLocaleMenuOpen] = useState(false);
   const [micState, setMicState] = useState<"checking" | "available" | "missing" | "blocked">("checking");
+  const [audioInputs, setAudioInputs] = useState<AudioInput[]>([]);
+  const [micTestState, setMicTestState] = useState<"idle" | "testing" | "error">("idle");
+  const [micTestLevel, setMicTestLevel] = useState(0);
   const [recentHistory, setRecentHistory] = useState<RecentHistoryItem[]>([]);
   const [copiedHistoryId, setCopiedHistoryId] = useState<string | null>(null);
   const copy = getAppCopy(appLocale);
   const ui = getUiCopy(appLocale);
   const sectionRefs = useRef<Record<string, HTMLElement | null>>({});
+  const micTestStreamRef = useRef<MediaStream | null>(null);
+  const micTestAudioContextRef = useRef<AudioContext | null>(null);
+  const micTestAnimationFrameRef = useRef<number | null>(null);
+  const micTestSourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
+  const micTestAnalyserRef = useRef<AnalyserNode | null>(null);
 
   useEffect(() => {
     const parsed = readAppSettings();
@@ -75,9 +87,18 @@ export default function MainPage({
       }
 
       try {
-        const stream = await requestPreferredAudioStream();
+        const currentSettings = readAppSettings();
+        const stream = await requestPreferredAudioStream(currentSettings.preferredAudioInputDeviceId || undefined);
         stream.getTracks().forEach((track) => track.stop());
         const devices = await navigator.mediaDevices.enumerateDevices();
+        setAudioInputs(
+          devices
+            .filter((device) => device.kind === "audioinput")
+            .map((device, index) => ({
+              deviceId: device.deviceId,
+              label: device.label || (appLocale === "ja" ? `マイク ${index + 1}` : `Microphone ${index + 1}`),
+            })),
+        );
         setMicState(devices.some((device) => device.kind === "audioinput") ? "available" : "missing");
       } catch (error) {
         setMicState(error instanceof DOMException && error.name === "NotAllowedError" ? "blocked" : "missing");
@@ -85,7 +106,7 @@ export default function MainPage({
     };
 
     void checkMicrophone();
-  }, []);
+  }, [appLocale]);
 
   useEffect(() => {
     void invoke<HotkeyBackendInfo>("get_hotkey_backend_info").then(setHotkeyBackendInfo).catch((err) => console.error("get_hotkey_backend_info failed:", err));
@@ -138,6 +159,83 @@ export default function MainPage({
     const id = window.setTimeout(() => setCelebrationCredits(null), 1600);
     return () => window.clearTimeout(id);
   }, [celebrationCredits]);
+
+  const stopMicTest = async () => {
+    if (micTestAnimationFrameRef.current !== null) {
+      window.cancelAnimationFrame(micTestAnimationFrameRef.current);
+      micTestAnimationFrameRef.current = null;
+    }
+
+    micTestSourceRef.current?.disconnect();
+    micTestAnalyserRef.current?.disconnect();
+    micTestSourceRef.current = null;
+    micTestAnalyserRef.current = null;
+
+    micTestStreamRef.current?.getTracks().forEach((track) => track.stop());
+    micTestStreamRef.current = null;
+
+    await micTestAudioContextRef.current?.close().catch(() => {
+      // ignore cleanup failures
+    });
+    micTestAudioContextRef.current = null;
+    setMicTestState("idle");
+    setMicTestLevel(0);
+  };
+
+  const handleMicTest = async () => {
+    if (micTestState === "testing") return;
+    await stopMicTest();
+    setMicTestState("testing");
+    setMicTestLevel(0);
+
+    try {
+      const stream = await requestPreferredAudioStream(settings.preferredAudioInputDeviceId || undefined);
+      const audioContext = new AudioContext();
+      const analyser = audioContext.createAnalyser();
+      analyser.fftSize = 1024;
+      analyser.smoothingTimeConstant = 0.72;
+      const source = audioContext.createMediaStreamSource(stream);
+      source.connect(analyser);
+
+      micTestStreamRef.current = stream;
+      micTestAudioContextRef.current = audioContext;
+      micTestSourceRef.current = source;
+      micTestAnalyserRef.current = analyser;
+
+      const samples = new Float32Array(analyser.fftSize);
+
+      const tick = () => {
+        if (!micTestAnalyserRef.current) return;
+
+        analyser.getFloatTimeDomainData(samples);
+        let sumSquares = 0;
+        let peak = 0;
+        for (const sample of samples) {
+          const absolute = Math.abs(sample);
+          sumSquares += sample * sample;
+          if (absolute > peak) peak = absolute;
+        }
+
+        const rms = Math.sqrt(sumSquares / samples.length);
+        const rawLevel = Math.max(0, Math.min(1, rms * 3.2 + peak * 1.1));
+        const easedLevel = Math.min(1, rawLevel * 1.12);
+        setMicTestLevel((current) => current * 0.58 + easedLevel * 0.42);
+
+        micTestAnimationFrameRef.current = window.requestAnimationFrame(tick);
+      };
+
+      micTestAnimationFrameRef.current = window.requestAnimationFrame(tick);
+    } catch {
+      await stopMicTest();
+      setMicTestState("error");
+    }
+  };
+
+  useEffect(() => {
+    return () => {
+      void stopMicTest();
+    };
+  }, []);
 
   useEffect(() => {
     const observedSections = NAV_ITEMS.map((item) => sectionRefs.current[item.id]).filter((element): element is HTMLElement => Boolean(element));
@@ -197,9 +295,7 @@ export default function MainPage({
         ? appLocale === "ja"
           ? `ボーナスクレジット ${profile?.credits ?? 0}`
           : `Bonus credits ${profile?.credits ?? 0}`
-        : appLocale === "ja"
-          ? "毎日 50 クレジットを付与"
-          : "50 daily credits";
+        : "";
   const languageLabel = LANGUAGE_OPTIONS.find((option) => option.value === settings.language)?.labels[appLocale] ?? settings.language;
   const modelLabel = MODEL_OPTIONS.find((option) => option.value === settings.model)?.labels[appLocale] ?? settings.model;
   const shortcutLabel = hotkey;
@@ -274,16 +370,15 @@ export default function MainPage({
   const sectionLabelClass = "text-xs uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400";
 
   const sectionHeaderClass = "flex items-center gap-3";
-  const sectionAccentClass = "h-1.5 w-20 overflow-hidden rounded-full bg-slate-100 dark:bg-white/10";
+  const sectionAccentClass =
+    "h-1.5 w-20 shrink-0 rounded-full bg-[linear-gradient(90deg,#ff4d7d_0%,#ff8a5c_18%,#ffd84d_36%,#64e4a1_54%,#5dd6ff_72%,#9b8cff_100%)] shadow-[0_0_0_1px_rgba(255,255,255,0.12)] dark:shadow-[0_0_0_1px_rgba(255,255,255,0.08)]";
   const sectionAccent = useMemo(
-    () => (
-      <div className={sectionAccentClass}>
-        <img src={waveformGradientImage} alt="" aria-hidden="true" className="h-full w-full object-cover" />
-      </div>
-    ),
+    () => <div className={sectionAccentClass} aria-hidden="true" />,
     []
   );
   const historyLabel = appLocale === "ja" ? "履歴" : "History";
+  const micTestLevelBars = 44;
+  const micTestActiveBars = Math.round(micTestLevel * micTestLevelBars);
 
   const handleCopyHistory = async (item: RecentHistoryItem) => {
     if (!item.transcribed_text) return;
@@ -370,8 +465,10 @@ export default function MainPage({
 
               <div className={GLASS_PANEL + " px-4 py-3"}>
                 <p className={sectionLabelClass}>{appLocale === "ja" ? "Credits" : "Credits"}</p>
-                <p className={`mt-1 ${sectionValueClass}`}>{creditSummaryLabel}</p>
-                <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{creditSummaryNote}</p>
+                <div className="mt-1 flex min-w-0 items-center gap-3 overflow-hidden">
+                  <p className={`${sectionValueClass} shrink-0 whitespace-nowrap`}>{creditSummaryLabel}</p>
+                  {creditSummaryNote ? <p className="min-w-0 truncate text-xs text-slate-500 dark:text-slate-400">{creditSummaryNote}</p> : null}
+                </div>
               </div>
 
               <DropdownMenu>
@@ -476,6 +573,95 @@ export default function MainPage({
                     className="w-full"
                   />
                   {hotkeyStatusMessage ? <p className="mt-2 text-xs text-slate-500 dark:text-slate-300">{hotkeyStatusMessage}</p> : null}
+                </div>
+              </div>
+
+              <div className={GLASS_PANEL + " p-4"}>
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex min-w-0 items-center gap-2">
+                    <Mic className="h-4 w-4 text-slate-400" />
+                    <p className="text-sm text-slate-700 dark:text-slate-200">
+                      {appLocale === "ja" ? "入力マイク" : "Input microphone"}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={micState === "blocked" || micState === "missing"}
+                      onClick={() => {
+                        if (micTestState === "testing") {
+                          void stopMicTest();
+                          return;
+                        }
+                        void handleMicTest();
+                      }}
+                      aria-label={micTestState === "testing" ? (appLocale === "ja" ? "停止" : "Stop") : appLocale === "ja" ? "再生" : "Play"}
+                    >
+                      {micTestState === "testing" ? <Square className="h-4 w-4" /> : <Play className="h-4 w-4" />}
+                    </Button>
+                  </div>
+                </div>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button type="button" variant="outline" className="mt-3 w-full justify-between">
+                      <span className="truncate">
+                        {audioInputs.find((device) => device.deviceId === settings.preferredAudioInputDeviceId)?.label ||
+                          (appLocale === "ja" ? "デフォルト" : "Default")}
+                      </span>
+                      <ChevronDown className="h-4 w-4 opacity-60" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent className="w-[min(420px,calc(100vw-48px))]">
+                    <DropdownMenuItem
+                      onSelect={() => {
+                        setMicTestState("idle");
+                        setMicTestLevel(0);
+                        setSettings((current) => ({
+                          ...current,
+                          preferredAudioInputDeviceId: "",
+                        }));
+                      }}
+                    >
+                      {settings.preferredAudioInputDeviceId === "" ? <Check className="mr-2 h-4 w-4" /> : <span className="mr-2 h-4 w-4" />}
+                      {appLocale === "ja" ? "デフォルト" : "Default"}
+                    </DropdownMenuItem>
+                    {audioInputs.map((device) => (
+                      <DropdownMenuItem
+                        key={device.deviceId}
+                        onSelect={() => {
+                          setMicTestState("idle");
+                          setMicTestLevel(0);
+                          setSettings((current) => ({
+                            ...current,
+                            preferredAudioInputDeviceId: device.deviceId,
+                          }));
+                        }}
+                      >
+                        {settings.preferredAudioInputDeviceId === device.deviceId ? <Check className="mr-2 h-4 w-4" /> : <span className="mr-2 h-4 w-4" />}
+                        <span className="truncate">{device.label}</span>
+                      </DropdownMenuItem>
+                    ))}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+                <div className="mt-4 rounded-[18px] border border-black/6 bg-white/70 p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.8)] dark:border-white/8 dark:bg-white/4">
+                  <div className="flex gap-1">
+                    {Array.from({ length: micTestLevelBars }).map((_, index) => {
+                      const isActive = index < micTestActiveBars;
+                      return (
+                        <div
+                          key={index}
+                          className={[
+                            "h-4 flex-1 rounded-[3px] transition-colors duration-100 ease-out",
+                            isActive
+                              ? "bg-[linear-gradient(180deg,#9ef87a_0%,#50c878_48%,#1f8f59_100%)] shadow-[0_0_0_1px_rgba(80,200,120,0.18),0_0_14px_rgba(80,200,120,0.16)]"
+                              : "bg-slate-200/95 dark:bg-white/10",
+                          ].join(" ")}
+                        />
+                      );
+                    })}
+                  </div>
                 </div>
               </div>
 

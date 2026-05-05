@@ -25,6 +25,7 @@ export function getAudioTrackDebugSummary(stream: MediaStream): string {
   const settings = track.getSettings();
   return JSON.stringify(
     {
+      label: track.label,
       deviceId: settings.deviceId,
       channelCount: settings.channelCount,
       sampleRate: settings.sampleRate,

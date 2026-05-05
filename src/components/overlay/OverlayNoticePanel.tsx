@@ -1,4 +1,3 @@
-import { GlassButton } from "@/components/einui/glass-button";
 import type { OverlayNoticeViewModel } from "@/lib/overlayNotice";
 
 type OverlayNoticePanelProps = {
@@ -13,51 +12,70 @@ export function OverlayNoticePanel({ notice, reduceMotion, onClose, onOpenApp, o
   const shellStyle = {
     width: "100%",
     height: "100%",
-    borderRadius: "20px",
+    borderRadius: "22px",
     overflow: "hidden",
-    padding: "14px",
-    border: "1px solid rgba(226,232,240,0.92)",
-    background: "linear-gradient(180deg, rgba(255,255,255,0.98) 0%, rgba(248,250,252,0.96) 100%)",
-    backdropFilter: reduceMotion ? "blur(8px)" : "blur(12px)",
-    WebkitBackdropFilter: reduceMotion ? "blur(8px)" : "blur(12px)",
-    boxShadow: "0 16px 40px rgba(15,23,42,0.16), 0 2px 10px rgba(15,23,42,0.08)",
+    padding: "16px",
+    border: "1px solid rgba(255,255,255,0.70)",
+    background:
+      "linear-gradient(145deg, rgba(255,255,255,0.99) 0%, rgba(252,254,255,0.98) 52%, rgba(244,247,251,0.97) 100%)",
+    backdropFilter: reduceMotion ? "blur(8px)" : "blur(14px)",
+    WebkitBackdropFilter: reduceMotion ? "blur(8px)" : "blur(14px)",
+    boxShadow: "inset 0 1px 0 rgba(255,255,255,0.98), inset 0 -1px 0 rgba(15,23,42,0.05)",
     color: "#0f172a",
     display: "flex",
     flexDirection: "column",
-    gap: "12px",
+    gap: "13px",
+    boxSizing: "border-box",
   } as const;
 
-  const actionStripStyle = {
-    display: "flex",
-    flexWrap: "wrap",
-    justifyContent: "flex-end",
-    gap: "8px",
-    marginTop: "2px",
+  const quietButtonStyle = {
+    height: "30px",
+    borderRadius: "999px",
+    border: "1px solid rgba(15,23,42,0.10)",
+    background: "rgba(255,255,255,0.68)",
+    color: "#334155",
+    padding: "0 12px",
+    fontSize: "11px",
+    fontWeight: 700,
+    cursor: "pointer",
+  } as const;
+
+  const primaryButtonStyle = {
+    height: "30px",
+    borderRadius: "999px",
+    border: "1px solid rgba(15,23,42,0.08)",
+    background: "rgba(15,23,42,0.92)",
+    color: "#ffffff",
+    padding: "0 13px",
+    fontSize: "11px",
+    fontWeight: 800,
+    boxShadow: "0 8px 22px rgba(15,23,42,0.18)",
+    cursor: "pointer",
   } as const;
 
   return (
     <div style={shellStyle} role="alert" aria-live="polite">
-      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "6px" }}>
-        <div style={{ display: "flex", flexDirection: "column", gap: "5px", flex: 1, minWidth: 0 }}>
+      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "10px" }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: "7px", flex: 1, minWidth: 0 }}>
           <div
             style={{
               display: "inline-flex",
               alignItems: "center",
               width: "fit-content",
               borderRadius: "999px",
-              padding: "4px 8px",
-              background: notice.kind === "error" ? "#fef2f2" : "#eef2ff",
-              color: notice.kind === "error" ? "#b42318" : "#334155",
-              fontSize: "8px",
+              padding: "4px 9px",
+              background: notice.kind === "error" ? "rgba(254,226,226,0.86)" : "rgba(224,242,254,0.86)",
+              color: notice.kind === "error" ? "#b42318" : "#075985",
+              fontSize: "9px",
               fontWeight: 700,
-              letterSpacing: "0.06em",
+              letterSpacing: "0.08em",
               textTransform: "uppercase",
             }}
           >
             {notice.badgeLabel}
           </div>
-          <div style={{ fontSize: "13px", fontWeight: 700, lineHeight: 1.35 }}>{notice.title}</div>
-          <div style={{ fontSize: "10px", lineHeight: 1.5, color: "#475569" }}>{notice.message}</div>
+          <div style={{ fontSize: "15px", fontWeight: 760, lineHeight: 1.32 }}>{notice.title}</div>
+          <div style={{ fontSize: "11px", lineHeight: 1.58, color: "#475569" }}>{notice.message}</div>
         </div>
         <button
           type="button"
@@ -68,34 +86,60 @@ export function OverlayNoticePanel({ notice, reduceMotion, onClose, onOpenApp, o
             height: "24px",
             flexShrink: 0,
             borderRadius: "999px",
-            border: "1px solid #e2e8f0",
-            background: "#ffffff",
+            border: "1px solid rgba(15,23,42,0.10)",
+            background: "rgba(255,255,255,0.74)",
             color: "#64748b",
-            fontSize: "14px",
+            fontSize: "15px",
             lineHeight: 1,
-            display: "grid",
-            placeItems: "center",
-            boxShadow: "0 1px 2px rgba(15,23,42,0.06)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: 0,
+            boxShadow: "inset 0 1px 0 rgba(255,255,255,0.88)",
             cursor: "pointer",
           }}
         >
-          ×
+          <span aria-hidden="true" style={{ lineHeight: 1, transform: "translateY(-0.5px)" }}>
+            ×
+          </span>
         </button>
       </div>
+
+      {notice.detail ? (
+        <div
+          style={{
+            borderRadius: "14px",
+            border: "1px solid rgba(252,165,165,0.64)",
+            background: "rgba(255,241,242,0.82)",
+            padding: "9px 11px",
+            fontSize: "10px",
+            lineHeight: 1.5,
+            color: "#9f1239",
+            whiteSpace: "pre-wrap",
+            wordBreak: "break-word",
+            minHeight: 0,
+            maxHeight: "70px",
+            overflow: "auto",
+          }}
+        >
+          {notice.detail}
+        </div>
+      ) : null}
 
       {notice.text ? (
         <div
           style={{
-            borderRadius: "12px",
-            border: "1px solid #e2e8f0",
-            background: "#f8fafc",
-            padding: "8px 10px",
-            fontSize: "9px",
+            borderRadius: "14px",
+            border: "1px solid rgba(148,163,184,0.22)",
+            background: "rgba(248,250,252,0.72)",
+            padding: "9px 11px",
+            fontSize: "10px",
             lineHeight: 1.6,
             color: "#334155",
             whiteSpace: "pre-wrap",
             wordBreak: "break-word",
-            maxHeight: "72px",
+            minHeight: 0,
+            maxHeight: "86px",
             overflow: "auto",
           }}
         >
@@ -103,21 +147,15 @@ export function OverlayNoticePanel({ notice, reduceMotion, onClose, onOpenApp, o
         </div>
       ) : null}
 
-      <div style={actionStripStyle}>
+      <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "flex-end", gap: "8px", marginTop: "auto" }}>
         {notice.copyLabel && notice.text && onCopy ? (
-          <GlassButton type="button" onClick={onCopy} variant="outline" size="sm" className="border-slate-300 bg-white text-slate-700 hover:bg-slate-50">
+          <button type="button" onClick={onCopy} style={quietButtonStyle}>
             {notice.copyLabel}
-          </GlassButton>
+          </button>
         ) : null}
-        <GlassButton
-          type="button"
-          onClick={onOpenApp}
-          variant="primary"
-          size="sm"
-          className="border-slate-900 bg-slate-900 text-white shadow-[0_8px_20px_rgba(15,23,42,0.18)] hover:bg-slate-800 hover:shadow-[0_10px_24px_rgba(15,23,42,0.22)] before:hidden"
-        >
+        <button type="button" onClick={onOpenApp} style={primaryButtonStyle}>
           {notice.openLabel}
-        </GlassButton>
+        </button>
       </div>
     </div>
   );

@@ -1,4 +1,6 @@
+import { useState } from "react";
 import { Link, Navigate } from "react-router-dom";
+import { Mail } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/useAuth";
 import type { AppLocale } from "@/lib/appLocale";
@@ -6,45 +8,67 @@ import type { AppLocale } from "@/lib/appLocale";
 type LoginUiCopy = {
   panelTitle: string;
   description: string;
-  submitLabel: string;
   googleLabel: string;
+  emailLabel: string;
+  emailPlaceholder: string;
+  emailSubmitLabel: string;
   privacyLabel: string;
   termsLabel: string;
   openingBrowser: string;
+  emailSent: string;
+  emailError: string;
+  separator: string;
 };
 
 const LOGIN_COPY: Record<AppLocale, LoginUiCopy> = {
   ja: {
     panelTitle: "おかえりなさい",
     description: "WhisperType にログインして、すぐに音声入力を再開できます。",
-    submitLabel: "ログイン",
     googleLabel: "Googleで続ける",
+    emailLabel: "メールアドレス",
+    emailPlaceholder: "mail@example.com",
+    emailSubmitLabel: "メールで続ける",
     privacyLabel: "プライバシー",
     termsLabel: "利用規約",
-    openingBrowser: "ブラウザを開いています...",
+    openingBrowser: "ブラウザでログインを完了してください...",
+    emailSent: "メールを送信しました。受信箱を確認してください。",
+    emailError: "メール送信に失敗しました。",
+    separator: "または",
   },
   en: {
     panelTitle: "Welcome back",
     description: "Log in to WhisperType and get back to voice input right away.",
-    submitLabel: "Log in",
     googleLabel: "Continue with Google",
+    emailLabel: "Email address",
+    emailPlaceholder: "mail@example.com",
+    emailSubmitLabel: "Send magic link",
     privacyLabel: "Privacy",
     termsLabel: "Terms",
     openingBrowser: "Opening browser...",
+    emailSent: "Sent. Check your inbox for the sign-in link.",
+    emailError: "Failed to send the email link.",
+    separator: "or",
   },
   es: {
     panelTitle: "Bienvenido",
     description: "Inicia sesion en WhisperType y vuelve a escribir con tu voz al instante.",
-    submitLabel: "Iniciar sesion",
     googleLabel: "Continuar con Google",
+    emailLabel: "Correo electronico",
+    emailPlaceholder: "mail@example.com",
+    emailSubmitLabel: "Enviar enlace",
     privacyLabel: "Privacidad",
     termsLabel: "Terminos",
     openingBrowser: "Abriendo navegador...",
+    emailSent: "Enviado. Revisa tu correo.",
+    emailError: "No se pudo enviar el correo.",
+    separator: "o",
   },
 };
 
 export default function LoginPage({ appLocale }: { appLocale: AppLocale }) {
-  const { user, signInWithGoogle, isLoading, authFlowStatus } = useAuth();
+  const { user, signInWithGoogle, signInWithEmailOtp, isLoading, authFlowStatus } = useAuth();
+  const [email, setEmail] = useState("");
+  const [emailStatus, setEmailStatus] = useState<string | null>(null);
   const locale =
     appLocale === "en" &&
     typeof navigator !== "undefined" &&
@@ -58,6 +82,23 @@ export default function LoginPage({ appLocale }: { appLocale: AppLocale }) {
       await signInWithGoogle();
     } catch (error) {
       console.error("Sign in error:", error);
+    }
+  };
+
+  const handleEmailSignIn = async () => {
+    const trimmedEmail = email.trim();
+    if (!trimmedEmail) {
+      setEmailStatus(copy.emailError);
+      return;
+    }
+
+    try {
+      setEmailStatus(null);
+      await signInWithEmailOtp(trimmedEmail);
+      setEmailStatus(copy.emailSent);
+    } catch (error) {
+      console.error("Email sign in error:", error);
+      setEmailStatus(copy.emailError);
     }
   };
 
@@ -83,13 +124,36 @@ export default function LoginPage({ appLocale }: { appLocale: AppLocale }) {
           </div>
 
           <div className="mt-10 space-y-4">
-            <Button
-              onClick={handleGoogleSignIn}
-              disabled={isLoading}
-              className="h-[52px] w-full rounded-full bg-[#111111] text-[15px] font-semibold text-white hover:bg-[#111111]/95"
-            >
-              {isLoading ? copy.openingBrowser : copy.submitLabel}
-            </Button>
+            <div className="space-y-3 rounded-[22px] border border-[#ebe7de] bg-[#faf8f4] p-4">
+              <label className="block text-left text-[13px] font-medium text-[#6b665d]">
+                {copy.emailLabel}
+              </label>
+              <input
+                type="email"
+                inputMode="email"
+                autoComplete="email"
+                value={email}
+                onChange={(event) => setEmail(event.target.value)}
+                placeholder={copy.emailPlaceholder}
+                className="h-12 w-full rounded-2xl border border-[#dfdbd2] bg-white px-4 text-[15px] text-[#111111] outline-none transition placeholder:text-[#b0aa9f] focus:border-[#111111]"
+              />
+              <Button
+                onClick={handleEmailSignIn}
+                disabled={isLoading || !email.trim()}
+                className="h-[52px] w-full rounded-full bg-[#111111] text-[15px] font-semibold text-white hover:bg-[#111111]/95"
+              >
+                <Mail className="mr-3 h-5 w-5" />
+                {isLoading ? copy.openingBrowser : copy.emailSubmitLabel}
+              </Button>
+            </div>
+
+            <div className="relative flex items-center">
+              <div className="h-px flex-1 bg-[#ebe7de]" />
+              <span className="px-3 text-[12px] uppercase tracking-[0.2em] text-[#b0aa9f]">
+                {copy.separator}
+              </span>
+              <div className="h-px flex-1 bg-[#ebe7de]" />
+            </div>
 
             <Button
               onClick={handleGoogleSignIn}
@@ -101,9 +165,9 @@ export default function LoginPage({ appLocale }: { appLocale: AppLocale }) {
             </Button>
           </div>
 
-          {authFlowStatus ? (
+          {authFlowStatus || emailStatus ? (
             <div className="mt-4 rounded-[18px] border border-[#ebe7de] bg-[#faf8f4] px-4 py-3 text-center text-[13px] leading-6 text-[#6b665d]">
-              {authFlowStatus}
+              {emailStatus ?? authFlowStatus}
             </div>
           ) : null}
 

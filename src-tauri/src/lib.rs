@@ -14,6 +14,7 @@ use tauri::{
     webview::Color,
     AppHandle, Emitter, Manager, UserAttentionType, WebviewUrl, WebviewWindowBuilder,
 };
+use reqwest::multipart;
 use hotkeys::{create_hotkey_backend, HotkeyBackend, HotkeyBackendInfo};
 #[cfg(target_os = "macos")]
 use hotkeys::{
@@ -24,7 +25,7 @@ use hotkeys::{
 use tauri_plugin_deep_link::DeepLinkExt;
 use text_input::type_text_internal;
 use log_store::append_log_line;
-use audio_processing::process_audio_with_ffmpeg;
+use audio_processing::{detect_speech_with_vad, process_audio_with_ffmpeg};
 use tray::setup_tray_clean;
 use windowing::{
     apply_overlay_visuals, configure_main_window_for_settings, position_window_bottom_center,
@@ -33,10 +34,10 @@ use windowing::{
 };
 use shared::hotkey_events::{
     emit_recording_started, emit_recording_stopped, emit_transcription_finished as emit_transcription_finished_event,
-    emit_transcription_started,
+    emit_transcription_prefetch, emit_transcription_started,
 };
 
-use std::sync::Mutex;
+use std::{sync::Mutex, thread, time::Duration};
 #[cfg(target_os = "windows")]
 use std::process::Command;
 use ms_store::{check_plus_store_license, get_checkout_provider, is_store_build, purchase_plus_via_store};
@@ -54,6 +55,7 @@ struct AppState {
     hotkey_backend: Box<dyn HotkeyBackend>,
     pending_deep_links: Mutex<Vec<String>>,
     cached_access_token: Mutex<Option<String>>,
+    overlay_ready: Mutex<bool>,
 }
 
 
@@ -157,14 +159,12 @@ fn ensure_windows_autostart() -> Result<(), String> {
 
 fn register_global_shortcut(app: &AppHandle, shortcut_str: &str) -> Result<String, String> {
     let state = app.state::<AppState>();
-    append_log_line(&format!("[Shortcut] registering {}", shortcut_str));
     let registered_shortcut = state
         .hotkey_backend
         .set_binding(app, shortcut_str)
         .map_err(|error| error.to_string())?;
     let mut current_shortcut = state.current_shortcut.lock().map_err(|e| e.to_string())?;
     *current_shortcut = registered_shortcut.clone();
-    append_log_line(&format!("[Shortcut] registered {}", registered_shortcut));
 
     Ok(registered_shortcut)
 }
@@ -176,6 +176,7 @@ fn start_recording(app: AppHandle) -> Result<(), String> {
     recording.is_recording = true;
     recording.is_transcribing = false;
     emit_recording_started(&app);
+    emit_transcription_prefetch(&app);
     Ok(())
 }
 
@@ -296,11 +297,12 @@ fn show_recording_window(app: AppHandle) -> Result<(), String> {
 }
 
 pub fn ensure_overlay_window(app: &AppHandle, visible: bool) -> Result<(), String> {
+    let created_window;
     let window = if let Some(window) = app.get_webview_window("overlay") {
-        append_log_line("[Overlay] ensure_overlay_window reused");
+        created_window = false;
         window
     } else {
-        append_log_line("[Overlay] ensure_overlay_window creating");
+        created_window = true;
         WebviewWindowBuilder::new(
         app,
         "overlay",
@@ -319,6 +321,10 @@ pub fn ensure_overlay_window(app: &AppHandle, visible: bool) -> Result<(), Strin
     .map_err(|e| e.to_string())?
     };
 
+    if created_window {
+        append_log_line("[Overlay] window created");
+    }
+
     position_window_bottom_center(
         &window,
         OVERLAY_WIDTH as f64,
@@ -329,10 +335,19 @@ pub fn ensure_overlay_window(app: &AppHandle, visible: bool) -> Result<(), Strin
     apply_overlay_visuals(&window);
     let _ = window.set_always_on_top(true);
     if visible {
-        append_log_line("[Overlay] ensure_overlay_window show");
+        append_log_line("[Overlay] show requested");
         show_window_without_focus(&window);
+        let retry_window = window.clone();
+        thread::spawn(move || {
+            for delay_ms in [50_u64, 150_u64] {
+                thread::sleep(Duration::from_millis(delay_ms));
+                apply_overlay_visuals(&retry_window);
+                let _ = retry_window.set_always_on_top(true);
+                show_window_without_focus(&retry_window);
+            }
+        });
     } else {
-        append_log_line("[Overlay] ensure_overlay_window hide");
+        append_log_line("[Overlay] hide requested");
         let _ = window.hide();
     }
 
@@ -340,8 +355,16 @@ pub fn ensure_overlay_window(app: &AppHandle, visible: bool) -> Result<(), Strin
 }
 
 #[tauri::command]
+fn overlay_ready(app: AppHandle) -> Result<(), String> {
+    let state = app.state::<AppState>();
+    let mut overlay_ready = state.overlay_ready.lock().map_err(|e| e.to_string())?;
+    *overlay_ready = true;
+    append_log_line("[Overlay] ready");
+    Ok(())
+}
+
+#[tauri::command]
 fn show_overlay_window(app: AppHandle) -> Result<(), String> {
-    append_log_line("[Overlay] show_overlay_window requested");
     ensure_overlay_window(&app, true)
 }
 
@@ -396,6 +419,65 @@ fn type_text(_app: AppHandle, text: String, use_clipboard_paste: bool) -> Result
 }
 
 #[tauri::command]
+async fn transcribe_request(
+    endpoint: String,
+    access_token: String,
+    apikey: Option<String>,
+    file_name: String,
+    file_bytes: Vec<u8>,
+    file_mime_type: String,
+    language: Option<String>,
+    model: String,
+    prompt: Option<String>,
+) -> Result<String, String> {
+    let client = reqwest::Client::new();
+    let file_size = file_bytes.len();
+    let has_language = language
+        .as_ref()
+        .map(|value| !value.trim().is_empty() && value != "auto")
+        .unwrap_or(false);
+    let has_prompt = prompt
+        .as_ref()
+        .map(|value| !value.trim().is_empty())
+        .unwrap_or(false);
+    let _ = (file_size, has_language, has_prompt);
+    let mut form = multipart::Form::new().part(
+        "file",
+        multipart::Part::bytes(file_bytes)
+            .file_name(file_name)
+            .mime_str(&file_mime_type)
+            .map_err(|error| error.to_string())?,
+    );
+
+    if let Some(language) = language.filter(|value| !value.trim().is_empty() && value != "auto") {
+        form = form.text("language", language);
+    }
+    form = form.text("model", model);
+    if let Some(prompt) = prompt.filter(|value| !value.trim().is_empty()) {
+        form = form.text("prompt", prompt);
+    }
+
+    let mut request = client
+        .post(&endpoint)
+        .bearer_auth(access_token)
+        .multipart(form);
+
+    if let Some(apikey) = apikey.filter(|value| !value.trim().is_empty()) {
+        request = request.header("apikey", apikey);
+    }
+
+    let response = request.send().await.map_err(|error| error.to_string())?;
+    let status = response.status();
+    let body_text = response.text().await.map_err(|error| error.to_string())?;
+
+    if !status.is_success() {
+        return Err(format!("HTTP {}: {}", status.as_u16(), body_text));
+    }
+
+    Ok(body_text)
+}
+
+#[tauri::command]
 fn log_to_terminal(msg: String) {
     if cfg!(debug_assertions) {
         append_log_line(&format!("[JS Log] {msg}"));
@@ -434,8 +516,6 @@ fn set_cached_access_token(app: AppHandle, token: Option<String>) -> Result<(), 
 pub fn run() {
     env_logger::init();
     let startup_at = std::time::Instant::now();
-    #[cfg(debug_assertions)]
-    println!("[Startup] tauri builder init");
 
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
@@ -463,6 +543,7 @@ pub fn run() {
             hotkey_backend: create_hotkey_backend(),
             pending_deep_links: Mutex::new(Vec::new()),
             cached_access_token: Mutex::new(None),
+            overlay_ready: Mutex::new(false),
         })
         .invoke_handler(tauri::generate_handler![
             start_recording,
@@ -478,6 +559,7 @@ pub fn run() {
             probe_macos_native_event_tap_command,
             request_macos_input_monitoring,
             show_overlay_window,
+            overlay_ready,
             hide_overlay_window,
             resize_overlay_window_command,
             close_overlay_window,
@@ -485,7 +567,9 @@ pub fn run() {
             hide_recording_window,
             show_settings_window,
             type_text,
+            transcribe_request,
             log_to_terminal,
+            detect_speech_with_vad,
             process_audio_with_ffmpeg,
             consume_pending_deep_links,
             get_cached_access_token,
@@ -500,10 +584,7 @@ pub fn run() {
             check_plus_store_license,
         ])
         .setup(move |app| {
-            #[cfg(debug_assertions)]
-            println!("[Startup] setup start: {}ms", startup_at.elapsed().as_millis());
             // Setup tray
-            let tray_at = std::time::Instant::now();
             setup_tray_clean(
                 app.handle(),
                 |app| {
@@ -514,9 +595,6 @@ pub fn run() {
                 },
                 toggle_main_window_visibility,
             )?;
-            #[cfg(debug_assertions)]
-            println!("[Startup] tray setup: {}ms", tray_at.elapsed().as_millis());
-
             if launched_in_background() {
                 if let Some(window) = app.get_webview_window("main") {
                     let _ = window.hide();
@@ -524,9 +602,6 @@ pub fn run() {
             } else {
                 restore_main_window(app.handle());
             }
-            #[cfg(debug_assertions)]
-            println!("[Startup] main window path: {}ms", startup_at.elapsed().as_millis());
-
             // Initialize deep link protocol
             let handle = app.handle().clone();
             app.deep_link().on_open_url(move |event| {
@@ -536,18 +611,13 @@ pub fn run() {
                 queue_and_emit_deep_links(&handle, urls);
             });
 
-            #[cfg(debug_assertions)]
-            println!("[Startup] overlay ready: {}ms", startup_at.elapsed().as_millis());
-
-            let shortcut_at = std::time::Instant::now();
             register_global_shortcut(app.handle(), "Ctrl+Alt")?;
-            #[cfg(debug_assertions)]
-            println!("[Startup] global shortcut: {}ms", shortcut_at.elapsed().as_millis());
+
+            ensure_overlay_window(app.handle(), false).ok();
 
             ensure_windows_autostart().ok();
 
-            #[cfg(debug_assertions)]
-            println!("[Startup] setup done: {}ms", startup_at.elapsed().as_millis());
+            let _ = startup_at;
             Ok(())
         })
         .run(tauri::generate_context!())

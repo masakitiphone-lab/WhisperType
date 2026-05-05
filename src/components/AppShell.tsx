@@ -137,18 +137,14 @@ export function AppShell({
 
       <div className="relative flex h-screen">
         <aside className="relative flex h-screen w-[264px] shrink-0 flex-col border-r border-white/40 bg-white/72 px-5 py-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.85),0_18px_50px_rgba(15,23,42,0.06)] backdrop-blur-2xl dark:border-white/10 dark:bg-white/6 dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.06),0_18px_50px_rgba(0,0,0,0.35)]">
-          <button
-            type="button"
-            onClick={() => onNavItemClick?.("home")}
-            className="mb-8 flex items-center gap-3 rounded-2xl px-2 py-1 text-left transition hover:bg-black/[0.035] dark:hover:bg-white/[0.04]"
-          >
+          <div className="mb-8 flex items-center gap-3 rounded-2xl px-2 py-1 text-left">
             <div className="relative flex h-11 w-11 items-center justify-center rounded-2xl border border-black/8 bg-white shadow-sm dark:border-white/10 dark:bg-[#17181b]">
               <img src="/app-icon.png" alt="WhisperType" className="h-8 w-8 rounded-xl object-cover" />
             </div>
             <div>
               <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">WhisperType</p>
             </div>
-          </button>
+          </div>
 
           {navItems && onNavItemClick ? (
             <nav className="space-y-2">

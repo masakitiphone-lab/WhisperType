@@ -16,6 +16,7 @@ pub fn apply_overlay_visuals(window: &WebviewWindow) {
 pub fn show_window_without_focus(window: &WebviewWindow) {
     let _ = window.unminimize();
     let _ = window.show();
+    let _ = window.set_always_on_top(true);
 }
 
 pub fn position_window_bottom_center(
@@ -24,7 +25,13 @@ pub fn position_window_bottom_center(
     height: f64,
     bottom_offset: f64,
 ) {
-    if let Ok(Some(monitor)) = window.current_monitor() {
+    let monitor = window
+        .current_monitor()
+        .ok()
+        .flatten()
+        .or_else(|| window.primary_monitor().ok().flatten());
+
+    if let Some(monitor) = monitor {
         let scale = monitor.scale_factor();
         let size = monitor.size().to_logical::<f64>(scale);
         let x = (size.width - width) / 2.0;
@@ -34,16 +41,17 @@ pub fn position_window_bottom_center(
 }
 
 pub fn resize_overlay_window(window: &WebviewWindow, width: f64, height: f64) {
-    let physical_width = width.max(1.0).round() as u32;
-    let physical_height = height.max(1.0).round() as u32;
-    let _ = window.set_size(tauri::Size::Physical(tauri::PhysicalSize {
-        width: physical_width,
-        height: physical_height,
+    let logical_width = width.max(1.0).round();
+    let logical_height = height.max(1.0).round();
+    apply_overlay_visuals(window);
+    let _ = window.set_size(tauri::Size::Logical(tauri::LogicalSize {
+        width: logical_width,
+        height: logical_height,
     }));
     position_window_bottom_center(
         window,
-        physical_width as f64,
-        physical_height as f64,
+        logical_width,
+        logical_height,
         OVERLAY_BOTTOM_OFFSET,
     );
 }

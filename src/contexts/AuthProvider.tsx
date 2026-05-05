@@ -59,8 +59,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     email: string;
     name: string | null;
     avatar_url: string | null;
-    credits: number | null;
     daily_credits: number | null;
+    bonus_credits: number | null;
     role: string | null;
     plan: string | null;
   };
@@ -70,9 +70,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     email: data.email,
     name: data.name ?? "User",
     avatarUrl: data.avatar_url ?? "",
-    credits: data.credits ?? 0,
-    dailyCredits: data.daily_credits ?? 50,
-    availableCredits: data.plan === "plus" ? null : (data.credits ?? 0) + (data.daily_credits ?? 50),
+    credits: data.bonus_credits ?? 0,
+    dailyCredits: data.daily_credits ?? 0,
+    availableCredits: data.plan === "plus" ? null : (data.daily_credits ?? 0) + (data.bonus_credits ?? 0),
     role: data.role ?? "user",
     plan: data.plan === "plus" ? "plus" : "free",
   });
@@ -88,7 +88,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       typeof currentUser.user_metadata?.avatar_url === "string" ? currentUser.user_metadata.avatar_url : "",
     credits: 0,
     dailyCredits: 50,
-    availableCredits: 50,
+    availableCredits: 0,
     role: "user",
     plan: "free",
   });
@@ -120,7 +120,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         "profiles select",
         supabase
           .from("profiles")
-          .select("id, email, name, avatar_url, credits, daily_credits, role, plan")
+          .select("id, email, name, avatar_url, daily_credits, bonus_credits, role, plan")
           .eq("id", currentUser.id)
           .maybeSingle(),
       );
@@ -185,25 +185,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Ensure daily credits refresh is reflected by calling get_transcription_context
     try {
       const { data, error } = await supabase.rpc("get_transcription_context");
-      const row = (Array.isArray(data) ? data[0] : data) as
-        | {
+        const row = (Array.isArray(data) ? data[0] : data) as
+          | {
             user_id: string;
-            credits: number | null;
             daily_credits: number | null;
+            bonus_credits: number | null;
             available_credits: number | null;
             plan: string | null;
             is_unlimited: boolean | null;
           }
-        | null;
+          | null;
 
       if (!error && row && row.user_id === user.id) {
         setProfile({
           ...baseProfile,
-          credits: row.credits ?? baseProfile.credits,
+          credits: row.bonus_credits ?? baseProfile.credits,
           dailyCredits: row.daily_credits ?? baseProfile.dailyCredits,
-          availableCredits: hasStorePlus || row.is_unlimited
-            ? null
-            : (row.available_credits ?? baseProfile.availableCredits),
+          availableCredits: hasStorePlus || row.is_unlimited ? null : (row.available_credits ?? baseProfile.availableCredits),
           plan: hasStorePlus || row.plan === "plus" ? "plus" : baseProfile.plan,
         });
         return;
@@ -294,6 +292,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           void ensureProfileWithRetry(initialUser).then((nextProfile) => {
             if (!mounted || !nextProfile) return;
             setProfile(nextProfile);
+          });
+          void refreshProfile().catch((error) => {
+            console.warn("Initial refreshProfile failed:", error);
           });
         } else {
           setProfile(null);
@@ -458,6 +459,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const signInWithEmailOtp = async (email: string) => {
+    const authCopy = getAuthFlowCopy(readAppLocale());
+
+    try {
+      setAuthFlowStatus(authCopy.preparing);
+      setAuthFlowStatus("Sending email sign-in link...");
+
+      const { error } = await supabase.auth.signInWithOtp({
+        email,
+        options: {
+          emailRedirectTo: authRedirectUrl,
+        },
+      });
+
+      if (error) throw error;
+
+      setAuthFlowStatus("Check your inbox for the sign-in link.");
+    } catch (e) {
+      console.error("[Auth] Email OTP sign-in error:", e);
+      throw e;
+    }
+  };
+
   const signOut = async () => {
     const authCopy = getAuthFlowCopy(readAppLocale());
 
@@ -497,6 +521,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         authFlowStatus,
         refreshProfile,
         signInWithGoogle,
+        signInWithEmailOtp,
         signOut,
       }}
     >

@@ -1,5 +1,9 @@
 use super::{BindingToken, HotkeyBackend, HotkeyBackendInfo, HotkeyBinding};
-use crate::{ensure_overlay_window, restore_main_window, shared::log::append_log_line, AppState};
+use crate::{
+    ensure_overlay_window, restore_main_window,
+    shared::{hotkey_events::emit_transcription_prefetch, log::append_log_line},
+    AppState,
+};
 use std::{
     collections::HashSet,
     sync::{
@@ -84,28 +88,6 @@ fn is_key_event(message: u32) -> bool {
     matches!(message, WM_SYSKEYDOWN | WM_KEYDOWN | WM_SYSKEYUP | WM_KEYUP)
 }
 
-fn log_required_transition(vk: u16, message: u32) {
-    match vk {
-        0x11 | 0xA2 | 0xA3 => {
-            let label = match message {
-                WM_SYSKEYDOWN | WM_KEYDOWN => "ctrl_down",
-                WM_SYSKEYUP | WM_KEYUP => "ctrl_up",
-                _ => return,
-            };
-            append_log_line(&format!("[Shortcut] {} vk={}", label, vk));
-        }
-        0x12 | 0xA4 | 0xA5 => {
-            let label = match message {
-                WM_SYSKEYDOWN | WM_KEYDOWN => "alt_down",
-                WM_SYSKEYUP | WM_KEYUP => "alt_up",
-                _ => return,
-            };
-            append_log_line(&format!("[Shortcut] {} vk={}", label, vk));
-        }
-        _ => {}
-    }
-}
-
 fn binding_is_down(pressed: &HashSet<u16>, required_groups: &[Vec<u16>]) -> bool {
     !required_groups.is_empty()
         && required_groups
@@ -143,32 +125,31 @@ fn start_overlay_session(state: &Arc<HookSharedState>, required_group_count: usi
             }
         }
 
-        let binding = state.binding_label.lock().unwrap().clone();
-        append_log_line(&format!(
-            "[Shortcut] start binding={} required_groups={}",
-            binding, required_group_count
-        ));
-        let _ = ensure_overlay_window(&app_handle, true);
+        let _ = required_group_count;
+        let overlay_ready = app_handle
+            .state::<AppState>()
+            .overlay_ready
+            .lock()
+            .map(|ready| *ready)
+            .unwrap_or(false);
+        append_log_line(&format!("[Shortcut] recording start overlay_ready={overlay_ready}"));
+
+        if let Err(error) = ensure_overlay_window(&app_handle, true) {
+            append_log_line(&format!("[Overlay] show failed: {error}"));
+        }
         if let Some(window) = app_handle.get_webview_window("overlay") {
             let _ = window.set_shadow(false);
             let _ = window.set_background_color(Some(Color(0, 0, 0, 0)));
             let _ = window.set_always_on_top(true);
         }
+        emit_transcription_prefetch(&app_handle);
         app_handle.emit("recording-started", ()).ok();
     }
 }
 
-fn stop_overlay_session(state: &Arc<HookSharedState>, reason: &str) {
+fn stop_overlay_session(state: &Arc<HookSharedState>, _reason: &str) {
     if let Some(app_handle) = state.app_handle.lock().unwrap().clone() {
-        let binding = state.binding_label.lock().unwrap().clone();
         let was_active = state.active.swap(false, Ordering::SeqCst);
-        append_log_line(&format!(
-            "[Shortcut] stop reason={} binding={} required_groups={} active={}",
-            reason,
-            binding,
-            state.required_groups.lock().unwrap().len(),
-            was_active
-        ));
         if was_active {
             app_handle.emit("recording-stopped", ()).ok();
         }
@@ -189,7 +170,6 @@ unsafe extern "system" fn low_level_keyboard_proc(
         let vk = keyboard.vkCode as u16;
         let message = w_param.0 as u32;
         if is_key_event(message) {
-            log_required_transition(vk, message);
             update_pressed_keys(&state, vk, message);
             handle_binding_state(&state);
         }
@@ -409,7 +389,6 @@ impl HotkeyBackend for WindowsHookHotkeyBackend {
         *state.pressed_keys.lock().unwrap() = HashSet::new();
         state.active.store(false, Ordering::SeqCst);
         *state.app_handle.lock().unwrap() = Some(app.clone());
-        append_log_line(&format!("[Shortcut] binding_set {}", binding));
 
         if let Some(error) = state.last_error.lock().unwrap().clone() {
             return Err(error);

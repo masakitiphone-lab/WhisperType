@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { motion } from "motion/react";
-import { CheckCircle2, XCircle, X, ExternalLink } from "lucide-react";
+import { CheckCircle2, ExternalLink, X, XCircle } from "lucide-react";
 import { desktopAuthRedirectUrl } from "@/lib/auth";
 import { readAppLocale, type AppLocale } from "@/lib/appLocale";
 
@@ -21,22 +21,22 @@ function getCallbackCopy(locale: AppLocale): CallbackCopy {
   if (locale === "ja") {
     return {
       eyebrow: "AUTHENTICATION",
-      title: "ログインが完了しました",
-      description: "WhisperType に戻りました。アプリをそのままご利用ください。",
-      closeHint: "このタブはもう不要です。下のボタンで閉じるか、手動で閉じてください。",
+      title: "入力が完了しました",
+      description: "WhisperType へのログインが完了しました。",
+      closeHint: "このページは閉じて大丈夫です。",
       closeButton: "このタブを閉じる",
       retryLabel: "アプリに戻る",
       errorTitle: "ログインを完了できませんでした",
-      errorDescription: "アプリからもう一度ログインをお試しください。",
+      errorDescription: "アプリからもう一度ログインを試してください。",
     };
   }
 
   if (locale === "es") {
     return {
       eyebrow: "AUTHENTICATION",
-      title: "Inicio de sesion completado",
-      description: "WhisperType ha vuelto a la app. Continua alli.",
-      closeHint: "Ya puedes cerrar esta pestana.",
+      title: "La entrada se completo",
+      description: "El inicio de sesion en WhisperType se completo.",
+      closeHint: "Ya puedes cerrar esta pagina.",
       closeButton: "Cerrar esta pestana",
       retryLabel: "Volver a la app",
       errorTitle: "No se pudo completar el inicio de sesion",
@@ -46,9 +46,9 @@ function getCallbackCopy(locale: AppLocale): CallbackCopy {
 
   return {
     eyebrow: "AUTHENTICATION",
-    title: "Authentication complete",
-    description: "WhisperType has returned to the app. Continue there.",
-    closeHint: "This tab is no longer needed. Close it below or manually.",
+    title: "Input complete",
+    description: "Your WhisperType sign-in has finished.",
+    closeHint: "You can close this page now.",
     closeButton: "Close this tab",
     retryLabel: "Return to the app",
     errorTitle: "Authentication could not be completed",
@@ -73,7 +73,6 @@ export default function AuthCallback() {
       return;
     }
 
-    // 1. まずアプリにディープリンクで戻る（非同期で少し遅延させて確実に処理）
     const redirectTimer = window.setTimeout(() => {
       try {
         window.location.href = desktopCallbackUrl;
@@ -82,11 +81,9 @@ export default function AuthCallback() {
       }
     }, 50);
 
-    // 2. すぐに完了画面に切り替える
-    //    ブラウザは自動で閉じないので、ユーザーに「閉じる」を促す
     const completeTimer = window.setTimeout(() => {
       setState(hasError ? "error" : "complete");
-    }, 200);
+    }, 900);
 
     return () => {
       window.clearTimeout(redirectTimer);
@@ -107,7 +104,6 @@ export default function AuthCallback() {
 
   return (
     <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-[#0f1117] px-6 py-8 text-slate-100">
-      {/* 背景装飾 */}
       <div className="pointer-events-none absolute inset-0 overflow-hidden">
         <div className="absolute -top-1/2 -left-1/4 h-[800px] w-[800px] rounded-full bg-indigo-500/10 blur-[120px]" />
         <div className="absolute -right-1/4 -bottom-1/2 h-[600px] w-[600px] rounded-full bg-emerald-500/8 blur-[100px]" />
@@ -120,7 +116,6 @@ export default function AuthCallback() {
         className="relative z-10 w-full max-w-sm"
       >
         <div className="overflow-hidden rounded-3xl border border-white/[0.08] bg-white/[0.03] shadow-2xl backdrop-blur-xl">
-          {/* アイコン */}
           <div className="flex flex-col items-center px-8 pt-10">
             <motion.div
               initial={{ scale: 0 }}
@@ -150,7 +145,6 @@ export default function AuthCallback() {
             </p>
           </div>
 
-          {/* アクションエリア */}
           <div className="px-8 pt-8 pb-10">
             {isError ? (
               <button

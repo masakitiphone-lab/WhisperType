@@ -29,8 +29,8 @@ export type ActiveRecording = {
   hadSpeech: boolean;
 };
 
-export const RECORDING_SPEECH_THRESHOLD = 0.06;
-export const RECORDING_SPEECH_RAW_THRESHOLD = 0.09;
+export const RECORDING_SPEECH_THRESHOLD = 0.14;
+export const RECORDING_SPEECH_RAW_THRESHOLD = 0.26;
 export const WAVEFORM_SMOOTHING = WAVEFORM_SPEECH_SMOOTHING;
 export const WAVEFORM_GAIN = WAVEFORM_VISUAL_GAIN;
 

@@ -22,6 +22,7 @@ export type AuthContextValue = {
   authFlowStatus: string | null;
   refreshProfile: () => Promise<void>;
   signInWithGoogle: () => Promise<void>;
+  signInWithEmailOtp: (email: string) => Promise<void>;
   signOut: () => Promise<void>;
 };
 

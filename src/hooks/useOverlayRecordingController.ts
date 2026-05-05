@@ -13,7 +13,21 @@ import { buildOverlayNotice, classifyOverlayError, type OverlayNoticePayload, ty
 import { prefetchTranscriptionReadiness, transcribeAudio } from "@/services/transcription";
 import { useRecordingSounds } from "@/hooks/useRecordingSounds";
 import { createDisplayWaveformLevels, createEmptyWaveformLevels, RECORDING_SPEECH_RAW_THRESHOLD, RECORDING_SPEECH_THRESHOLD, WAVEFORM_GAIN, WAVEFORM_SMOOTHING, type ActiveRecording, type CapsulePhase, type CapturePhase } from "@/hooks/overlayRecordingWaveform";
-import { BASE_HEIGHT, CAPSULE_COLLAPSE_DURATION, CAPSULE_CONTENT_WIDTH, CAPSULE_EXPAND_DURATION, OVERLAY_WINDOW_BUFFER_X, OVERLAY_HEIGHT, OVERLAY_WIDTH } from "@/lib/overlayLayout";
+import {
+  CAPSULE_COLLAPSE_DURATION,
+  CAPSULE_EXPAND_DURATION,
+  getOverlayCapsuleStageHeight,
+  getOverlayCapsuleStageWidth,
+  getOverlayNoticeContentHeight,
+  getOverlayNoticeStageHeight,
+  getOverlayNoticeStageWidth,
+} from "@/lib/overlayLayout";
+
+type VadDetectionResult = {
+  has_speech: boolean;
+  total_frames: number;
+  speech_frames: number;
+};
 
 export function useOverlayRecordingController() {
   const [recordingState, setState] = useState<"idle" | "recording" | "transcribing" | "finished">("idle");
@@ -113,17 +127,13 @@ export function useOverlayRecordingController() {
     updateState("transcribing");
   };
   const stageWidth =
-    overlayLayoutMode === "spinner" && capsuleMounted && capsulePhase === "idle"
-      ? OVERLAY_WIDTH
-      : overlayNotice
-        ? overlayNotice.width
-        : CAPSULE_CONTENT_WIDTH + OVERLAY_WINDOW_BUFFER_X * 2;
+    overlayNotice
+      ? getOverlayNoticeStageWidth(overlayNotice.width)
+      : getOverlayCapsuleStageWidth();
   const stageHeight =
-    overlayLayoutMode === "spinner"
-      ? OVERLAY_HEIGHT
-      : overlayNotice
-        ? overlayNotice.minHeight
-        : Math.max(OVERLAY_HEIGHT, BASE_HEIGHT + 8);
+    overlayNotice
+      ? getOverlayNoticeStageHeight(getOverlayNoticeContentHeight(overlayNotice))
+      : getOverlayCapsuleStageHeight();
   useEffect(() => {
     const syncSettings = () => {
       uiSettingsRef.current = readAppSettings();
@@ -206,10 +216,7 @@ export function useOverlayRecordingController() {
         return;
       }
       try {
-        const pasteResult = await invoke<string>("type_text", { text: `${combinedText} `, useClipboardPaste: true });
-        await invoke("log_to_terminal", {
-          msg: `[Paste Result] ${pasteResult}`,
-        }).catch((err) => console.error("log_to_terminal failed:", err));
+        await invoke<string>("type_text", { text: `${combinedText} `, useClipboardPaste: true });
       } catch (error) {
         await invoke("log_to_terminal", {
           msg: `[Paste Flush Error] ${error}`,
@@ -246,8 +253,6 @@ export function useOverlayRecordingController() {
       recordingSessionActiveRef.current = false;
       pendingTranscriptionsRef.current += 1;
       uiSettingsRef.current = readAppSettings();
-      if (stopSoundRef.current) stopSoundRef.current.volume = uiSettingsRef.current.soundVolume;
-      if (uiSettingsRef.current.playStopSound) void stopSoundRef.current?.play().catch((err) => console.error("Stop sound play failed:", err));
       const activeStream = recording.stream;
       const activeAudioContext = recording.audioContext;
       const activeWaveformAnimation = recording.waveformAnimation;
@@ -261,8 +266,26 @@ export function useOverlayRecordingController() {
           recording.mediaRecorder.stop();
         });
       }
+      await cleanupAudioResources(activeStream, activeAudioContext, activeWaveformAnimation, false);
       try {
-        if (!recordedBlob || recordedBlob.size === 0 || !recording.hadSpeech) throw new Error("silent_audio");
+        if (!recordedBlob || recordedBlob.size === 0 || !recording.hadSpeech) {
+          await invoke("log_to_terminal", {
+            msg: `[Transcription] skipped silent_audio hadSpeech=${recording.hadSpeech} bytes=${recordedBlob?.size ?? 0}`,
+          }).catch((err) => console.error("log_to_terminal failed:", err));
+          throw new Error("silent_audio");
+        }
+        const vadResult = await invoke<VadDetectionResult>("detect_speech_with_vad", {
+          bytes: Array.from(new Uint8Array(await recordedBlob.arrayBuffer())),
+        });
+        if (!vadResult.has_speech) {
+          await invoke("log_to_terminal", {
+            msg: `[Transcription] skipped vad_rejected frames=${vadResult.speech_frames}/${vadResult.total_frames} bytes=${recordedBlob.size}`,
+          }).catch((err) => console.error("log_to_terminal failed:", err));
+          throw new Error("silent_audio");
+        }
+        await invoke("log_to_terminal", {
+          msg: `[Transcription] API request vad=${vadResult.speech_frames}/${vadResult.total_frames} bytes=${recordedBlob.size}`,
+        }).catch((err) => console.error("log_to_terminal failed:", err));
         await invoke("start_transcription");
         const text = await transcribeAudio(recordedBlob);
         queueTranscriptionPaste(text);
@@ -271,20 +294,42 @@ export function useOverlayRecordingController() {
         });
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error);
+        console.error("Transcription job failed:", {
+          errorMessage,
+          errorName: error instanceof Error ? error.name : typeof error,
+          rawError: error,
+        });
         if (errorMessage.toLowerCase() === "silent_audio") {
           return;
         }
         if (errorMessage.toLowerCase() === "empty_transcription") {
+          const overlayError = classifyOverlayError(errorMessage);
+          overlayError.detail = "empty_transcription: 音声は送信されましたが、文字起こし結果が空でした。入力音量・マイク・モデル応答を確認してください。";
+          keepOverlayVisible = true;
+          await showOverlayNotice(overlayError);
           return;
         }
         if (errorMessage.toLowerCase() === "transcription_timeout") {
+          const overlayError = classifyOverlayError(errorMessage);
+          overlayError.detail = "transcription_timeout: 文字起こしAPIが15秒以内に応答しませんでした。ネットワークまたはAPI側の遅延です。";
+          keepOverlayVisible = true;
+          await showOverlayNotice(overlayError);
           return;
         }
         if (errorMessage.toLowerCase().includes("invalid_audio")) {
+          const overlayError = classifyOverlayError(errorMessage);
+          overlayError.detail = errorMessage;
+          keepOverlayVisible = true;
+          await showOverlayNotice(overlayError);
           return;
         }
         const overlayError = classifyOverlayError(errorMessage);
+        overlayError.detail = errorMessage || `code: ${overlayError.code}`;
         const showableErrorCodes = new Set([
+          "transcription_failed",
+          "transcription_timeout",
+          "empty_transcription",
+          "invalid_audio",
           "auth_required",
           "insufficient_credits",
           "ctrl_v_send_failed",
@@ -310,7 +355,11 @@ export function useOverlayRecordingController() {
         capturePhaseRef.current = "idle";
       }
       if (!currentRecordingRef.current && !isStartingRef.current && pendingTranscriptionsRef.current === 0 && pendingPasteTextRef.current.trim()) {
-        await flushPastedTranscriptions().catch((error) => {
+        await flushPastedTranscriptions().then(() => {
+          uiSettingsRef.current = readAppSettings();
+          if (stopSoundRef.current) stopSoundRef.current.volume = uiSettingsRef.current.soundVolume;
+          if (uiSettingsRef.current.playStopSound) void stopSoundRef.current?.play().catch((err) => console.error("Success sound play failed:", err));
+        }).catch((error) => {
           console.error("Failed to flush pending transcription text:", error);
         });
       }
@@ -341,6 +390,9 @@ export function useOverlayRecordingController() {
       updateCapsulePhase("expanding");
       updateState("recording");
       setIsOverlayVisible(uiSettingsRef.current.showOverlay);
+      if (uiSettingsRef.current.showOverlay) {
+        await invoke("show_overlay_window").catch((err) => console.error("show_overlay_window failed:", err));
+      }
       if (uiSettingsRef.current.playStartSound) {
         void startSoundRef.current?.play().catch((err) => console.error("Start sound play failed:", err));
       }
@@ -351,12 +403,16 @@ export function useOverlayRecordingController() {
       }, shouldReduceMotion ? 80 : CAPSULE_EXPAND_DURATION * 1000);
       await invoke("resize_overlay_window_command", {
         width: stageWidth * uiSettingsRef.current.overlayScale,
-        height: (OVERLAY_HEIGHT + 12) * uiSettingsRef.current.overlayScale,
+        height: stageHeight * uiSettingsRef.current.overlayScale,
       });
       try {
-        const stream = await requestPreferredAudioStream();
+        const preferredAudioInputDeviceId = uiSettingsRef.current.preferredAudioInputDeviceId.trim();
+        const stream = await requestPreferredAudioStream(preferredAudioInputDeviceId || undefined);
         mediaStreamRef.current = stream;
-        if (stateRef.current === "idle" || stateRef.current === "finished") return;
+        if (stateRef.current === "idle" || stateRef.current === "finished") {
+          await cleanupAudioResources(stream);
+          return;
+        }
         const audioContext = new AudioContext();
         audioContextRef.current = audioContext;
         const analyser = audioContext.createAnalyser();
@@ -422,6 +478,7 @@ export function useOverlayRecordingController() {
       } catch (error) {
         console.error("Microphone start failed:", error);
         capturePhaseRef.current = "idle";
+        await cleanupAudioResources();
         await invoke("finish_transcription").catch((err) => console.error("finish_transcription failed:", err));
         isStartingRef.current = false;
         await showOverlayNotice({ kind: "error", code: "microphone_unavailable" } as OverlayNoticePayload);
@@ -451,11 +508,6 @@ export function useOverlayRecordingController() {
         const finishedRecording = currentRecordingRef.current;
         recordingSessionActiveRef.current = false;
         currentRecordingRef.current = null;
-        mediaStreamRef.current = null;
-        audioContextRef.current = null;
-        analyserRef.current = null;
-        dataArrayRef.current = null;
-        waveformAnimationRef.current = null;
         beginTranscriptionTransition();
         void processTranscriptionJob(finishedRecording);
       });

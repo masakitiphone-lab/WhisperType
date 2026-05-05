@@ -24,11 +24,10 @@ export const LEGACY_DEFAULT_TRANSCRIPTION_PROMPT =
 
 export const DEFAULT_TRANSCRIPTION_PROMPT = "";
 
-export const JAPANESE_TRANSCRIPTION_PROMPT =
-  "日本語は自然な漢字かな交じりで文字起こししてください。全部ひらがなにしないでください。製品名やブランド名は通常の表記を維持し、末尾の重複文を追加しないでください。";
+export const JAPANESE_TRANSCRIPTION_PROMPT = "日本語の自然な表記。固有名詞は通常表記。";
 
 export const ENGLISH_TRANSCRIPTION_PROMPT =
-  "Transcribe in natural English spelling. Keep product and brand names in their usual spelling, and do not add duplicated trailing text.";
+  "Natural English spelling. Keep names and brand terms unchanged.";
 
 export function buildTranscriptionSettingsPayload(
   settings: TranscriptionSettings
@@ -49,13 +48,16 @@ export const DEFAULT_TRANSCRIPTION_SETTINGS: TranscriptionSettings = {
 export function readTranscriptionSettings(): TranscriptionSettings {
   try {
     const settings = readAppSettings();
+    const prompt = settings.prompt;
     return {
       language: settings.language,
       model: settings.model,
       prompt:
-        settings.prompt === LEGACY_DEFAULT_TRANSCRIPTION_PROMPT
+        prompt === LEGACY_DEFAULT_TRANSCRIPTION_PROMPT ||
+        prompt === JAPANESE_TRANSCRIPTION_PROMPT ||
+        prompt === ENGLISH_TRANSCRIPTION_PROMPT
           ? DEFAULT_TRANSCRIPTION_SETTINGS.prompt
-          : settings.prompt,
+          : prompt,
     };
   } catch (error) {
     console.warn("Failed to read transcription settings:", error);

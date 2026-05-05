@@ -6,7 +6,6 @@ import { OverlayNoticePanel } from "@/components/overlay/OverlayNoticePanel";
 import { TransitioningOverlayIcon } from "@/components/overlay/TransitioningOverlayIcon";
 import { WaveformStrip } from "@/components/overlay/WaveformStrip";
 import { useRecordingController } from "@/hooks/RecordingControllerContext";
-import { useMeasuredElementSize } from "@/hooks/useMeasuredElementSize";
 import {
   BASE_HEIGHT,
   WAVEFORM_BAR_COUNT,
@@ -17,6 +16,7 @@ import {
   getCapsuleAnimationWidth,
   getCapsuleWidthProgress,
   getIconTravelX,
+  getOverlayNoticeContentHeight,
   getPhaseAnimationProgress,
   getWaveformPhaseOpacity,
 } from "@/lib/overlayLayout";
@@ -64,11 +64,10 @@ export default function OverlayPage() {
     stageWidth,
     stageHeight,
     shouldReduceMotion,
+    uiSettingsRef,
   } = useRecordingController();
 
   const [now, setNow] = useState(() => Date.now());
-  const noticeMeasure = useMeasuredElementSize<HTMLDivElement>();
-  const capsuleMeasure = useMeasuredElementSize<HTMLDivElement>();
 
   useEffect(() => {
     let frame = 0;
@@ -81,7 +80,7 @@ export default function OverlayPage() {
   }, []);
 
   const showCapsule = recordingState === "recording" && !overlayNotice;
-  const showWaveform = recordingState === "recording";
+  const showWaveform = recordingState === "recording" && uiSettingsRef.current.showWaveform;
   const showCapsuleContent = capsulePhase === "settled" && showCapsule;
   const capsuleRadius = BASE_HEIGHT / 2;
   const iconBallSize = BASE_HEIGHT - 4;
@@ -95,42 +94,31 @@ export default function OverlayPage() {
   const iconTravelX = getIconTravelX(capsuleAnimationProgress, stageWidth, capsuleContentBandWidth, iconBallSize);
   const waveformOpacity = getWaveformPhaseOpacity(capsulePhase, now - capsulePhaseStartedAt);
   const noticeWidth = overlayNotice?.width ?? 320;
-  const noticeMinHeight = overlayNotice?.minHeight ?? 112;
-  const measuredStageWidth = overlayNotice
-    ? noticeMeasure.size?.width ?? noticeWidth
-    : capsuleMounted
-      ? capsuleMeasure.size?.width ?? stageWidth
-      : stageWidth;
-  const measuredStageHeight = overlayNotice
-    ? noticeMeasure.size?.height ?? noticeMinHeight
-    : capsuleMounted
-      ? capsuleMeasure.size?.height ?? stageHeight
-      : stageHeight;
+  const noticeHeight = overlayNotice ? getOverlayNoticeContentHeight(overlayNotice) : 112;
 
   useEffect(() => {
     if (!isOverlayVisible) {
       return;
     }
     void invoke("resize_overlay_window_command", {
-      width: measuredStageWidth * overlayScale,
-      height: measuredStageHeight * overlayScale,
+      width: stageWidth * overlayScale,
+      height: stageHeight * overlayScale,
     }).catch((err) => console.error("resize_overlay_window_command failed:", err));
-  }, [isOverlayVisible, measuredStageHeight, measuredStageWidth, overlayScale]);
+  }, [isOverlayVisible, overlayScale, stageHeight, stageWidth]);
 
   return (
     <div
       style={{
         position: "fixed",
-        bottom: "40px",
-        left: "50%",
-        transform: "translateX(-50%)",
+        inset: 0,
         zIndex: 9999,
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
         pointerEvents: "none",
-        height: `${measuredStageHeight * overlayScale}px`,
-        width: `${measuredStageWidth * overlayScale}px`,
+        height: "100vh",
+        width: "100vw",
+        background: "transparent",
       }}
     >
       <div
@@ -138,23 +126,23 @@ export default function OverlayPage() {
           position: "absolute",
           left: "50%",
           top: "50%",
-          width: `${measuredStageWidth}px`,
-          height: `${measuredStageHeight}px`,
+          width: `${stageWidth}px`,
+          height: `${stageHeight}px`,
           transform: `translate(-50%, -50%) scale(${overlayScale})`,
           transformOrigin: "center center",
+          background: "transparent",
         }}
       >
-        <div style={{ position: "relative", width: "100%", height: "100%" }}>
+        <div style={{ position: "relative", width: "100%", height: "100%", background: "transparent" }}>
           <AnimatePresence mode="wait" initial={false}>
             {isOverlayVisible && overlayNotice ? (
               <div
-                ref={noticeMeasure.ref}
                 style={{
                   position: "absolute",
                   left: "50%",
                   top: "50%",
                   width: `${noticeWidth}px`,
-                  minHeight: `${noticeMinHeight}px`,
+                  height: `${noticeHeight}px`,
                   transform: "translate(-50%, -50%)",
                   pointerEvents: "auto",
                 }}
@@ -166,7 +154,7 @@ export default function OverlayPage() {
                   exit={glassShellMotion.exit}
                   style={{
                     width: "100%",
-                    minHeight: "100%",
+                    height: "100%",
                     borderRadius: "12px",
                     background: "transparent",
                     border: "none",
@@ -183,12 +171,14 @@ export default function OverlayPage() {
                     }}
                     onOpenApp={async () => {
                       await openAppFromOverlay();
+                      await clearOverlayNotice();
                     }}
                     onCopy={
                       overlayNotice.copyLabel && overlayNotice.text
                         ? async () => {
-                            await navigator.clipboard.writeText(overlayNotice.text ?? "");
-                          }
+                          await navigator.clipboard.writeText(overlayNotice.text ?? "");
+                          await clearOverlayNotice();
+                        }
                         : undefined
                     }
                   />
@@ -200,7 +190,6 @@ export default function OverlayPage() {
           <AnimatePresence mode="wait" initial={false}>
             {isOverlayVisible && capsuleMounted ? (
               <div
-                ref={capsuleMeasure.ref}
                 style={{
                   position: "absolute",
                   left: "50%",

@@ -18,7 +18,10 @@
   - Treat transcription as unlimited for billing, but cap usage at 500 transcriptions per day.
 
 ## Current release rules
-- Microsoft Store Plus purchase must be prepared before release and wired up after Store publication.
+- Microsoft Store Plus is an in-app subscription add-on for the free app.
+- Plus price target is JPY 300/month.
+- Set `WHISPERTYPE_PLUS_STORE_ID` at build time after creating the Partner Center subscription add-on.
+- Until the Store product ID is configured, purchase UI must stay disabled and return a clear `store_product_not_configured` state.
 - The production desktop OAuth callback uses `whispertype://auth/callback`.
 - The production browser landing page after Google login is `http://retirecurl.app`.
 - `VITE_TRANSCRIBE_URL` still needs live confirmation before release.

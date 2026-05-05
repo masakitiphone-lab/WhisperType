@@ -34,8 +34,12 @@ Core flow:
   - Use a browser page that tells the user they can return to the app and close the page.
   - This is separate from the desktop deep-link callback.
 - Microsoft Store Plus purchase:
-  - Prepare the Plus purchase flow before release.
-  - Wire it to the Store identity after Store publication.
+  - App itself is free.
+  - Plus is a Microsoft Store in-app subscription add-on.
+  - Price target: JPY 300/month.
+  - Build-time Store product ID env var: `WHISPERTYPE_PLUS_STORE_ID`.
+  - Before Partner Center product setup, purchase UI must remain disabled and show a clear product-not-configured state.
+  - After Partner Center setup, wire `WHISPERTYPE_PLUS_STORE_ID` to the subscription add-on Store ID and complete `Windows.Services.Store` purchase/license checks.
 - Free plan credits:
   - `daily_credits` is consumed first.
   - `bonus_credits` is consumed after `daily_credits` reaches zero.
@@ -183,6 +187,7 @@ Frontend:
 
 Desktop:
 - `src-tauri/src/lib.rs`
+- `src-tauri/src/ms_store.rs`
 - `src-tauri/src/text_input.rs`
 - `src-tauri/src/windowing.rs`
 - `src-tauri/src/tray.rs`
@@ -191,6 +196,7 @@ Desktop:
 
 Backend:
 - Cloudflare Worker transcription endpoint
+- Reference Worker source: `docs/cloudflare-worker-transcribe.js`
 
 ## Build And Dev Commands
 
@@ -227,6 +233,8 @@ Before broader release, verify:
 6. overlay paste flow
 7. promo code redemption
 8. logout
+9. Microsoft Store package build
+10. Plus subscription add-on purchase and license refresh
 
 ## What Not To Reintroduce
 

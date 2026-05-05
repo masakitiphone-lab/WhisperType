@@ -1,16 +1,21 @@
 use serde::Serialize;
 
 const CHECKOUT_PROVIDER: &str = "ms-store";
+const PLUS_STORE_PRODUCT_ID: Option<&str> = option_env!("WHISPERTYPE_PLUS_STORE_ID");
 
 #[derive(Clone, Serialize)]
 pub struct CheckoutProviderInfo {
     provider: String,
+    plus_product_configured: bool,
 }
 
 #[tauri::command]
 pub fn get_checkout_provider() -> Result<CheckoutProviderInfo, String> {
     Ok(CheckoutProviderInfo {
         provider: CHECKOUT_PROVIDER.to_string(),
+        plus_product_configured: PLUS_STORE_PRODUCT_ID
+            .map(|value| !value.trim().is_empty())
+            .unwrap_or(false),
     })
 }
 
@@ -31,6 +36,7 @@ pub async fn check_plus_store_license() -> Result<bool, String> {
 
 #[cfg(target_os = "windows")]
 mod store_impl {
+    use super::PLUS_STORE_PRODUCT_ID;
     use windows::{
         Win32::{
             Foundation::WIN32_ERROR,
@@ -61,8 +67,16 @@ mod store_impl {
             return Err("Microsoft Store purchases require a packaged Store build.".to_string());
         }
 
+        let product_id = PLUS_STORE_PRODUCT_ID
+            .filter(|value| !value.trim().is_empty())
+            .ok_or_else(|| {
+                "store_product_not_configured: set WHISPERTYPE_PLUS_STORE_ID after creating the Microsoft Store subscription add-on."
+                    .to_string()
+            })?;
+
+        let _ = product_id;
         Err(
-            "Store purchase wiring is not finished. Add the Partner Center subscription Store ID and complete the Windows.Services.Store implementation."
+            "store_purchase_not_wired: Windows.Services.Store RequestPurchaseAsync wiring is pending."
                 .to_string(),
         )
     }

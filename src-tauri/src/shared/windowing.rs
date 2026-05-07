@@ -34,8 +34,9 @@ pub fn position_window_bottom_center(
     if let Some(monitor) = monitor {
         let scale = monitor.scale_factor();
         let size = monitor.size().to_logical::<f64>(scale);
-        let x = (size.width - width) / 2.0;
-        let y = size.height - height - bottom_offset;
+        let position = monitor.position().to_logical::<f64>(scale);
+        let x = position.x + (size.width - width) / 2.0;
+        let y = position.y + size.height - height - bottom_offset;
         let _ = window.set_position(tauri::Position::Logical(tauri::LogicalPosition { x, y }));
     }
 }

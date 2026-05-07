@@ -305,6 +305,7 @@ export function HotkeyRecorder({
     <div className={cn("space-y-3", className)}>
       <input
         ref={inputRef}
+        data-hotkey-recorder="true"
         onKeyDown={handleKeyDown}
         onKeyUp={handleKeyUp}
         onBlur={handleBlur}

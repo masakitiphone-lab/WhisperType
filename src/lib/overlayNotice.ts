@@ -34,8 +34,8 @@ export function classifyOverlayError(errorMessage: string): OverlayNoticePayload
     normalized.includes("refresh token") ||
     normalized.includes("jwt")
   ) return { kind: "error", code: "auth_required" };
+  if (normalized.includes("daily_limit_exceeded")) return { kind: "error", code: "usage_protection" };
   if (normalized.includes("credit")) return { kind: "error", code: "insufficient_credits" };
-  if (normalized.includes("daily_limit_exceeded")) return { kind: "error", code: "insufficient_credits" };
   if (normalized.includes("invalid_audio")) return { kind: "error", code: "invalid_audio" };
   if (normalized.includes("empty_transcription")) return { kind: "error", code: "empty_transcription" };
   if (normalized.includes("profile_unavailable")) return { kind: "error", code: "profile_unavailable" };
@@ -172,6 +172,10 @@ const ERROR_COPY: Record<AppLocale, Record<string, { title: string; message: str
       title: "利用上限に達しました",
       message: "現在のプランではこの文字起こしを完了できません。",
     },
+    usage_protection: {
+      title: "一時的に利用できません",
+      message: "しばらく待ってからもう一度お試しください。",
+    },
     transcription_timeout: {
       title: "文字起こしがタイムアウトしました",
       message: "通信または処理に時間がかかりすぎました。もう一度お試しください。",
@@ -222,6 +226,10 @@ const ERROR_COPY: Record<AppLocale, Record<string, { title: string; message: str
       title: "Usage limit reached",
       message: "Your current plan cannot complete this transcription.",
     },
+    usage_protection: {
+      title: "Temporarily unavailable",
+      message: "Please wait a while and try again.",
+    },
     transcription_timeout: {
       title: "Transcription timed out",
       message: "The request took too long. Try again.",
@@ -271,6 +279,10 @@ const ERROR_COPY: Record<AppLocale, Record<string, { title: string; message: str
     insufficient_credits: {
       title: "Límite de uso alcanzado",
       message: "Tu plan actual no puede completar esta transcripción.",
+    },
+    usage_protection: {
+      title: "No disponible temporalmente",
+      message: "Espera un momento y vuelve a intentarlo.",
     },
     transcription_timeout: {
       title: "La transcripción agotó el tiempo",

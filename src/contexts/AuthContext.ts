@@ -24,6 +24,7 @@ export type AuthContextValue = {
   signInWithGoogle: () => Promise<void>;
   signInWithEmailOtp: (email: string) => Promise<void>;
   signOut: () => Promise<void>;
+  deleteAccountData: () => Promise<void>;
 };
 
 export const AuthContext = createContext<AuthContextValue | undefined>(undefined);

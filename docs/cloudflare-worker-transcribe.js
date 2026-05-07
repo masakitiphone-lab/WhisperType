@@ -37,9 +37,66 @@ export default {
       });
 
     const origin = req.headers.get("Origin");
+    const url = new URL(req.url);
 
     if (req.method === "OPTIONS") {
       return new Response("ok", { headers: buildCorsHeaders(origin) });
+    }
+
+    if (url.pathname === "/store/entitlement") {
+      if (req.method !== "POST") {
+        return json({ error: "method_not_allowed" }, 405, origin);
+      }
+
+      try {
+        const syncSecret = env.STORE_ENTITLEMENT_SYNC_SECRET;
+        const supabaseUrl = env.SUPABASE_URL;
+        const serviceRoleKey = env.SUPABASE_SERVICE_ROLE_KEY;
+
+        if (!syncSecret || !supabaseUrl || !serviceRoleKey) {
+          throw new Error("server_misconfigured: missing_store_entitlement_env");
+        }
+
+        const requestSecret = req.headers.get("x-whispertype-store-sync-secret") || "";
+        if (requestSecret !== syncSecret) {
+          return json({ error: "auth_required" }, 401, origin);
+        }
+
+        const body = await req.json();
+        const userId = typeof body?.user_id === "string" ? body.user_id : "";
+        const storeId = typeof body?.store_id === "string" ? body.store_id : "";
+        const active = body?.active === true;
+
+        if (!userId || !storeId) {
+          return json({ error: "invalid_store_entitlement_payload" }, 400, origin);
+        }
+
+        const syncResponse = await fetch(`${supabaseUrl}/rest/v1/rpc/sync_ms_store_plus_entitlement`, {
+          method: "POST",
+          headers: {
+            apikey: serviceRoleKey,
+            Authorization: `Bearer ${serviceRoleKey}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            user_id_param: userId,
+            store_id_param: storeId,
+            active_param: active,
+          }),
+        });
+
+        if (!syncResponse.ok) {
+          throw new Error(
+            `store_entitlement_sync_failed: status=${syncResponse.status} body=${await readResponseText(syncResponse)}`
+          );
+        }
+
+        return json({ ok: true }, 200, origin);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "store_entitlement_sync_failed";
+        console.error("[Worker] Store entitlement sync failed", message);
+        return json({ error: message }, 400, origin);
+      }
     }
 
     if (req.method !== "POST") {

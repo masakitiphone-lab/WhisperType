@@ -124,6 +124,8 @@ export default function TutorialPracticeModal({
   const [audioInputs, setAudioInputs] = useState<AudioInput[]>([]);
   const [selectedMicId, setSelectedMicId] = useState(readAppSettings().preferredAudioInputDeviceId || "");
   const [hotkey, setHotkey] = useState(() => normalizeHotkeyForDisplay(readAppSettings().hotkey));
+  const [hotkeyStatus, setHotkeyStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const [hotkeyStatusMessage, setHotkeyStatusMessage] = useState("");
   const micCheckRanRef = useRef(false);
   const copy = getCopy(initialLocale);
   const textAreaRef = useRef<HTMLTextAreaElement | null>(null);
@@ -173,12 +175,24 @@ export default function TutorialPracticeModal({
 
   const handleHotkeyChange = async (nextHotkey: string) => {
     const normalized = normalizeHotkeyForDisplay(nextHotkey);
-    setHotkey(normalized);
-    writeAppSettings({ hotkey: normalized });
+    setHotkeyStatus("saving");
+    setHotkeyStatusMessage("");
     try {
-      await invoke<string>("set_global_shortcut", { shortcut: normalizeHotkeyForNative(normalized) });
-    } catch {
-      // keep the local value; user can still continue in tutorial
+      const registeredHotkey = await invoke<string>("set_global_shortcut", { shortcut: normalizeHotkeyForNative(normalized) });
+      const displayHotkey = normalizeHotkeyForDisplay(registeredHotkey);
+      setHotkey(displayHotkey);
+      writeAppSettings({ hotkey: displayHotkey });
+      setHotkeyStatus("saved");
+      setHotkeyStatusMessage(initialLocale === "ja" ? "ショートカットを保存しました。" : initialLocale === "es" ? "Atajo guardado." : "Shortcut saved.");
+    } catch (error) {
+      setHotkeyStatus("error");
+      setHotkeyStatusMessage(
+        initialLocale === "ja"
+          ? `ショートカットを登録できませんでした: ${String(error)}`
+          : initialLocale === "es"
+            ? `No se pudo registrar el atajo: ${String(error)}`
+            : `Could not register shortcut: ${String(error)}`,
+      );
     }
   };
 
@@ -189,6 +203,7 @@ export default function TutorialPracticeModal({
   };
 
   const handleHotkeyNext = () => {
+    if (hotkeyStatus === "saving" || hotkeyStatus === "error") return;
     setStep("practice");
   };
 
@@ -269,13 +284,28 @@ export default function TutorialPracticeModal({
                   </div>
                   <HotkeyRecorder
                     value={hotkey}
+                    allowModifierOnly
                     onChange={(next) => {
                       void handleHotkeyChange(next);
                     }}
+                    onInvalid={(message) => {
+                      setHotkeyStatus("error");
+                      setHotkeyStatusMessage(message);
+                    }}
                     className="w-full"
                   />
+                  {hotkeyStatusMessage ? (
+                    <p className={hotkeyStatus === "error" ? "text-sm text-red-600" : "text-sm text-emerald-700"}>
+                      {hotkeyStatusMessage}
+                    </p>
+                  ) : null}
                   <div className="flex justify-end">
-                    <Button type="button" className="rounded-2xl px-5" onClick={handleHotkeyNext}>
+                    <Button
+                      type="button"
+                      className="rounded-2xl px-5"
+                      onClick={handleHotkeyNext}
+                      disabled={hotkeyStatus === "saving" || hotkeyStatus === "error"}
+                    >
                       {copy.hotkeyAction}
                     </Button>
                   </div>

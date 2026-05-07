@@ -77,7 +77,6 @@ export default function AuthCallback() {
       try {
         window.location.href = desktopCallbackUrl;
       } catch {
-        // ignore
       }
     }, 50);
 
@@ -98,7 +97,6 @@ export default function AuthCallback() {
     try {
       window.close();
     } catch {
-      // ignore
     }
   };
 

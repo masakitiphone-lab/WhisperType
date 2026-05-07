@@ -383,6 +383,8 @@ export function useOverlayRecordingController() {
       uiSettingsRef.current = readAppSettings();
       if (finishTimeoutRef.current) window.clearTimeout(finishTimeoutRef.current);
       if (spinnerHideTimeoutRef.current) window.clearTimeout(spinnerHideTimeoutRef.current);
+      if (noticeDismissTimeoutRef.current) window.clearTimeout(noticeDismissTimeoutRef.current);
+      noticeDismissTimeoutRef.current = null;
       setOverlayNotice(null);
       setOverlayLayoutMode("capsule");
       setSpinnerPhase("hidden");
@@ -405,6 +407,11 @@ export function useOverlayRecordingController() {
         width: stageWidth * uiSettingsRef.current.overlayScale,
         height: stageHeight * uiSettingsRef.current.overlayScale,
       });
+      if (uiSettingsRef.current.showOverlay) {
+        window.requestAnimationFrame(() => {
+          void invoke("show_overlay_window").catch((err) => console.error("show_overlay_window retry failed:", err));
+        });
+      }
       try {
         const preferredAudioInputDeviceId = uiSettingsRef.current.preferredAudioInputDeviceId.trim();
         const stream = await requestPreferredAudioStream(preferredAudioInputDeviceId || undefined);
@@ -510,6 +517,9 @@ export function useOverlayRecordingController() {
         currentRecordingRef.current = null;
         beginTranscriptionTransition();
         void processTranscriptionJob(finishedRecording);
+      });
+      await invoke("overlay_ready").catch((error) => {
+        console.error("overlay_ready failed:", error);
       });
     })();
     return () => {

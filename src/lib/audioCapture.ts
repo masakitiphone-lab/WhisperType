@@ -16,29 +16,6 @@ export async function requestPreferredAudioStream(deviceId?: string): Promise<Me
   });
 }
 
-export function getAudioTrackDebugSummary(stream: MediaStream): string {
-  const [track] = stream.getAudioTracks();
-  if (!track) {
-    return "No audio track";
-  }
-
-  const settings = track.getSettings();
-  return JSON.stringify(
-    {
-      label: track.label,
-      deviceId: settings.deviceId,
-      channelCount: settings.channelCount,
-      sampleRate: settings.sampleRate,
-      sampleSize: settings.sampleSize,
-      echoCancellation: settings.echoCancellation,
-      noiseSuppression: settings.noiseSuppression,
-      autoGainControl: settings.autoGainControl,
-    },
-    null,
-    0
-  );
-}
-
 export function getPreferredRecordingMimeType(): string {
   if (typeof MediaRecorder === "undefined") {
     return "";

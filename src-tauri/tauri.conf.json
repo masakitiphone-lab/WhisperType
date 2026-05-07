@@ -19,20 +19,6 @@
         "minHeight": 680,
         "center": true,
         "visible": false
-      },
-      {
-        "label": "overlay",
-        "title": "WhisperType - Recording",
-        "url": "overlay.html",
-        "width": 360,
-        "height": 170,
-        "transparent": true,
-        "decorations": false,
-        "alwaysOnTop": true,
-        "skipTaskbar": true,
-        "visible": false,
-        "resizable": false,
-        "focus": false
       }
     ],
     "security": {

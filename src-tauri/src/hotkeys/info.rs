@@ -6,6 +6,7 @@ pub struct HotkeyBackendInfo {
     pub platform: String,
     pub backend_tier: String,
     pub planned_native_backend: Option<String>,
+    pub supports_modifier_only: bool,
     pub supports_function_keys: bool,
     pub supports_navigation_keys: bool,
     pub supports_mouse_buttons: bool,

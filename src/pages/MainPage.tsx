@@ -1,7 +1,7 @@
 ﻿import { useEffect, useMemo, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
-import { Check, ChevronDown, Home, Mic, Play, Square, SlidersHorizontal } from "lucide-react";
+import { Check, ChevronDown, Home, Mic, Play, Plus, Square, SlidersHorizontal, Trash2, TriangleAlert } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
 import { HotkeyRecorder } from "@/components/HotkeyRecorder";
 import { Button } from "@/components/ui/button";
@@ -38,7 +38,7 @@ export default function MainPage({
   onRestartTutorial?: () => void;
 }) {
   const navigate = useNavigate();
-  const { profile, user, refreshProfile } = useAuth();
+  const { profile, user, refreshProfile, deleteAccountData } = useAuth();
   const [activeSection, setActiveSection] = useState<MainPageSectionId>("home");
   const [hotkey, setHotkey] = useState("Ctrl+Alt");
   const [settings, setSettings] = useState<AppSettings>({
@@ -59,6 +59,9 @@ export default function MainPage({
   const [micTestLevel, setMicTestLevel] = useState(0);
   const [recentHistory, setRecentHistory] = useState<RecentHistoryItem[]>([]);
   const [copiedHistoryId, setCopiedHistoryId] = useState<string | null>(null);
+  const [isDeleteAccountDialogOpen, setIsDeleteAccountDialogOpen] = useState(false);
+  const [isDeletingAccount, setIsDeletingAccount] = useState(false);
+  const [deleteAccountError, setDeleteAccountError] = useState<string | null>(null);
   const copy = getAppCopy(appLocale);
   const ui = getUiCopy(appLocale);
   const sectionRefs = useRef<Record<string, HTMLElement | null>>({});
@@ -175,7 +178,6 @@ export default function MainPage({
     micTestStreamRef.current = null;
 
     await micTestAudioContextRef.current?.close().catch(() => {
-      // ignore cleanup failures
     });
     micTestAudioContextRef.current = null;
     setMicTestState("idle");
@@ -284,18 +286,14 @@ export default function MainPage({
         ? "無制限"
         : "Unlimited"
       : appLocale === "ja"
-        ? `今日 ${profile?.dailyCredits ?? 50} / 50`
-        : `${profile?.dailyCredits ?? 50} / 50 today`;
-  const creditSummaryNote =
+        ? `デイリー ${profile?.dailyCredits ?? 50} / 50`
+        : `Daily ${profile?.dailyCredits ?? 50} / 50`;
+  const bonusCreditCount =
     currentPlan === "plus"
-      ? appLocale === "ja"
-        ? "文字起こしは無制限です"
-        : "Unlimited transcription"
+      ? null
       : (profile?.credits ?? 0) > 0
-        ? appLocale === "ja"
-          ? `ボーナスクレジット ${profile?.credits ?? 0}`
-          : `Bonus credits ${profile?.credits ?? 0}`
-        : "";
+        ? profile?.credits ?? 0
+        : null;
   const languageLabel = LANGUAGE_OPTIONS.find((option) => option.value === settings.language)?.labels[appLocale] ?? settings.language;
   const modelLabel = MODEL_OPTIONS.find((option) => option.value === settings.model)?.labels[appLocale] ?? settings.model;
   const shortcutLabel = hotkey;
@@ -387,7 +385,77 @@ export default function MainPage({
     window.setTimeout(() => setCopiedHistoryId((current) => (current === item.id ? null : current)), 1200);
   };
 
+  const deleteAccountCopy =
+    appLocale === "ja"
+      ? {
+          title: "アカウントデータを削除しますか？",
+          description:
+            "プロフィール、文字起こし履歴、利用回数データを削除してサインアウトします。この操作は元に戻せません。Microsoft Storeのサブスクリプションは別途Microsoft側で解約してください。",
+          open: "アカウントデータを削除",
+          confirm: "削除する",
+          cancel: "キャンセル",
+          error: "削除できませんでした。接続を確認してもう一度お試しください。",
+        }
+      : {
+          title: "Delete account data?",
+          description:
+            "This deletes your profile, transcription history, and usage data, then signs you out. This cannot be undone. Microsoft Store subscriptions must be cancelled separately in Microsoft.",
+          open: "Delete account data",
+          confirm: "Delete",
+          cancel: "Cancel",
+          error: "Could not delete account data. Check your connection and try again.",
+        };
+
+  const handleDeleteAccountData = async () => {
+    try {
+      setIsDeletingAccount(true);
+      setDeleteAccountError(null);
+      await deleteAccountData();
+    } catch {
+      setDeleteAccountError(deleteAccountCopy.error);
+    } finally {
+      setIsDeletingAccount(false);
+    }
+  };
+
   return (
+    <>
+    {isDeleteAccountDialogOpen ? (
+      <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/30 px-4 backdrop-blur-[3px]">
+        <div className="w-full max-w-md rounded-[28px] border border-black/8 bg-white/96 p-6 shadow-[0_24px_80px_rgba(15,23,42,0.18)] dark:border-white/10 dark:bg-[#121316]/96">
+          <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-2xl bg-rose-50 text-rose-600 dark:bg-rose-500/10 dark:text-rose-300">
+            <TriangleAlert className="h-5 w-5" />
+          </div>
+          <h2 className="text-lg font-semibold text-slate-950 dark:text-slate-50">{deleteAccountCopy.title}</h2>
+          <p className="mt-2 text-sm leading-6 text-slate-600 dark:text-slate-300">{deleteAccountCopy.description}</p>
+          {deleteAccountError ? <p className="mt-3 text-sm leading-6 text-rose-600 dark:text-rose-300">{deleteAccountError}</p> : null}
+          <div className="mt-6 flex justify-end gap-3">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                setDeleteAccountError(null);
+                setIsDeleteAccountDialogOpen(false);
+              }}
+              disabled={isDeletingAccount}
+              className="rounded-2xl"
+            >
+              {deleteAccountCopy.cancel}
+            </Button>
+            <Button
+              type="button"
+              onClick={() => {
+                void handleDeleteAccountData();
+              }}
+              disabled={isDeletingAccount}
+              className="rounded-2xl bg-rose-600 text-white hover:bg-rose-700"
+            >
+              {isDeletingAccount ? `${deleteAccountCopy.confirm}...` : deleteAccountCopy.confirm}
+            </Button>
+          </div>
+        </div>
+      </div>
+    ) : null}
     <AppShell
       appLocale={appLocale}
       navItems={NAV_ITEMS.map((item) => ({ id: item.id, label: item.label[appLocale === "ja" ? "ja" : "en"] }))}
@@ -417,12 +485,9 @@ export default function MainPage({
               </div>
             </div>
 
-            <div className="grid gap-5 rounded-[30px] border border-white/35 bg-[linear-gradient(135deg,rgba(255,255,255,0.84),rgba(244,247,252,0.92),rgba(255,255,255,0.8))] px-5 py-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.9),0_18px_40px_rgba(15,23,42,0.06)] transition-all duration-200 ease-out dark:border-white/10 dark:bg-[linear-gradient(135deg,rgba(255,255,255,0.06),rgba(255,255,255,0.03),rgba(255,255,255,0.05))] lg:grid-cols-[1.1fr_0.9fr] lg:items-center">
+            <div className="grid gap-5 overflow-hidden rounded-[30px] border border-white/35 bg-[linear-gradient(135deg,rgba(248,250,252,0.86),rgba(244,247,252,0.92),rgba(248,250,252,0.86))] px-5 py-5 shadow-[0_18px_40px_rgba(15,23,42,0.06)] transition-all duration-200 ease-out dark:border-white/10 dark:bg-[linear-gradient(135deg,rgba(255,255,255,0.06),rgba(255,255,255,0.03),rgba(255,255,255,0.05))] lg:min-h-[430px] lg:grid-cols-[0.82fr_1.18fr] lg:items-stretch">
               <div className="space-y-4">
                 <div className="space-y-2">
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-slate-400 dark:text-slate-500">
-                    {appLocale === "ja" ? "準備完了" : "Ready"}
-                  </p>
                   <p className="text-3xl font-semibold tracking-tight text-slate-950 dark:text-slate-50">
                     {appLocale === "ja" ? "音声入力の準備ができています" : "Voice input is ready"}
                   </p>
@@ -448,11 +513,11 @@ export default function MainPage({
                 </div>
               </div>
 
-              <div className="relative flex min-h-[280px] items-center justify-center overflow-visible rounded-[26px] p-3 lg:min-h-[340px]">
+              <div className="relative flex min-h-[340px] items-center justify-center overflow-visible rounded-[26px] lg:min-h-0">
                 <img
                   src="/hero-woman-transparent.png"
                   alt={appLocale === "ja" ? "音声入力のイラスト" : "Voice input illustration"}
-                  className="relative z-10 block h-auto w-auto max-h-[clamp(280px,34vw,420px)] max-w-full object-contain object-center"
+                  className="relative z-10 block h-full max-h-[min(54vw,560px)] w-full max-w-none object-contain object-center lg:absolute lg:inset-0 lg:h-full lg:max-h-none"
                 />
               </div>
             </div>
@@ -465,9 +530,19 @@ export default function MainPage({
 
               <div className={GLASS_PANEL + " px-4 py-3"}>
                 <p className={sectionLabelClass}>{appLocale === "ja" ? "Credits" : "Credits"}</p>
-                <div className="mt-1 flex min-w-0 items-center gap-3 overflow-hidden">
+                <div className="mt-1 flex min-w-0 items-center justify-between gap-3 overflow-hidden">
                   <p className={`${sectionValueClass} shrink-0 whitespace-nowrap`}>{creditSummaryLabel}</p>
-                  {creditSummaryNote ? <p className="min-w-0 truncate text-xs text-slate-500 dark:text-slate-400">{creditSummaryNote}</p> : null}
+                  {currentPlan === "plus" ? (
+                    <p className="min-w-0 truncate text-right text-xs text-slate-500 dark:text-slate-400">
+                      {appLocale === "ja" ? "文字起こし無制限" : "Unlimited transcription"}
+                    </p>
+                  ) : bonusCreditCount !== null ? (
+                    <div className="ml-auto inline-flex shrink-0 items-center gap-1.5 rounded-full bg-emerald-500/10 px-2.5 py-1 text-xs font-semibold text-emerald-700 dark:text-emerald-300">
+                      <Plus className="h-3.5 w-3.5" />
+                      <span>{appLocale === "ja" ? "ボーナス" : "Bonus"}</span>
+                      <span>{bonusCreditCount}</span>
+                    </div>
+                  ) : null}
                 </div>
               </div>
 
@@ -729,6 +804,33 @@ export default function MainPage({
                 </div>
               </div>
 
+              <div className={GLASS_PANEL + " p-4"}>
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                      {appLocale === "ja" ? "アカウントデータ" : "Account data"}
+                    </p>
+                    <p className="mt-1 text-xs leading-5 text-slate-500 dark:text-slate-400">
+                      {appLocale === "ja"
+                        ? "プロフィールと文字起こし履歴を削除します。"
+                        : "Delete your profile and transcription history."}
+                    </p>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => {
+                      setDeleteAccountError(null);
+                      setIsDeleteAccountDialogOpen(true);
+                    }}
+                    className="justify-start border-rose-200 text-rose-700 hover:bg-rose-50 dark:border-rose-400/20 dark:text-rose-300 dark:hover:bg-rose-400/10"
+                  >
+                    <Trash2 className="mr-2 h-4 w-4" />
+                    {deleteAccountCopy.open}
+                  </Button>
+                </div>
+              </div>
+
             </CardContent>
           </Card>
         </section>
@@ -758,6 +860,7 @@ export default function MainPage({
         />
       </div>
     </AppShell>
+    </>
   );
 }
 

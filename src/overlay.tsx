@@ -6,9 +6,11 @@ import { RecordingControllerProvider } from "./hooks/RecordingControllerContext"
 import "./index.css";
 import "./overlay.css";
 
-void invoke("overlay_ready").catch((error) => {
-  console.error("overlay_ready failed:", error);
-});
+window.setInterval(() => {
+  void invoke("overlay_heartbeat").catch((error) => {
+    console.error("overlay_heartbeat failed:", error);
+  });
+}, 10_000);
 
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
   <React.StrictMode>

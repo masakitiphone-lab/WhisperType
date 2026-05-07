@@ -1,9 +1,5 @@
 use super::{BindingToken, HotkeyBackend, HotkeyBackendInfo, HotkeyBinding};
-use crate::{
-    ensure_overlay_window, restore_main_window,
-    shared::{hotkey_events::emit_transcription_prefetch, log::append_log_line},
-    AppState,
-};
+use crate::{restore_main_window, shared::log::append_log_line, AppState};
 use std::{
     collections::HashSet,
     sync::{
@@ -12,14 +8,15 @@ use std::{
     },
     thread,
 };
-use tauri::{webview::Color, AppHandle, Emitter, Manager};
+use tauri::{AppHandle, Emitter, Manager};
 use windows::Win32::{
-    Foundation::{HMODULE, LPARAM, LRESULT, WPARAM},
+    Foundation::{HMODULE, HWND, LPARAM, LRESULT, WPARAM},
     System::LibraryLoader::GetModuleHandleW,
     UI::WindowsAndMessaging::{
-        CallNextHookEx, DispatchMessageW, GetMessageW, SetWindowsHookExW, TranslateMessage,
-        UnhookWindowsHookEx, HC_ACTION, HHOOK, KBDLLHOOKSTRUCT, MSG, LLKHF_INJECTED, WH_KEYBOARD_LL,
-        WM_KEYDOWN, WM_KEYUP, WM_SYSKEYDOWN, WM_SYSKEYUP,
+        CallNextHookEx, DispatchMessageW, GetForegroundWindow, GetMessageW, GetWindowTextW,
+        GetWindowThreadProcessId, SetWindowsHookExW, TranslateMessage, UnhookWindowsHookEx,
+        HC_ACTION, HHOOK, KBDLLHOOKSTRUCT, MSG, LLKHF_INJECTED, WH_KEYBOARD_LL, WM_KEYDOWN,
+        WM_KEYUP, WM_SYSKEYDOWN, WM_SYSKEYUP,
     },
 };
 
@@ -88,6 +85,56 @@ fn is_key_event(message: u32) -> bool {
     matches!(message, WM_SYSKEYDOWN | WM_KEYDOWN | WM_SYSKEYUP | WM_KEYUP)
 }
 
+fn message_label(message: u32) -> &'static str {
+    match message {
+        WM_SYSKEYDOWN => "WM_SYSKEYDOWN",
+        WM_KEYDOWN => "WM_KEYDOWN",
+        WM_SYSKEYUP => "WM_SYSKEYUP",
+        WM_KEYUP => "WM_KEYUP",
+        _ => "unknown",
+    }
+}
+
+fn key_is_part_of_binding(vk: u16, required_groups: &[Vec<u16>]) -> bool {
+    required_groups
+        .iter()
+        .any(|group| group.iter().any(|key| *key == vk))
+}
+
+unsafe fn foreground_window_summary() -> String {
+    let foreground_window: HWND = GetForegroundWindow();
+    if foreground_window.0.is_null() {
+        return "foreground=none".to_string();
+    }
+
+    let mut process_id = 0_u32;
+    GetWindowThreadProcessId(foreground_window, Some(&mut process_id));
+
+    let mut title_buffer = [0_u16; 96];
+    let title_len = GetWindowTextW(foreground_window, &mut title_buffer);
+    let title = if title_len > 0 {
+        String::from_utf16_lossy(&title_buffer[..title_len as usize])
+    } else {
+        "(untitled)".to_string()
+    };
+
+    format!("foreground_pid={process_id} foreground_title={title:?}")
+}
+
+fn log_relevant_key_event(state: &Arc<HookSharedState>, vk: u16, message: u32, injected: bool) {
+    let required_groups = state.required_groups.lock().unwrap().clone();
+    if !key_is_part_of_binding(vk, &required_groups) {
+        return;
+    }
+
+    let binding_label = state.binding_label.lock().unwrap().clone();
+    let foreground = unsafe { foreground_window_summary() };
+    append_log_line(&format!(
+        "[Shortcut] key event binding={binding_label} vk={vk} msg={} injected={injected} {foreground}",
+        message_label(message),
+    ));
+}
+
 fn binding_is_down(pressed: &HashSet<u16>, required_groups: &[Vec<u16>]) -> bool {
     !required_groups.is_empty()
         && required_groups
@@ -104,9 +151,13 @@ fn handle_binding_state(state: &Arc<HookSharedState>) {
     match (was_active, binding_down) {
         (false, true) => {
             state.active.store(true, Ordering::SeqCst);
+            let binding_label = state.binding_label.lock().unwrap().clone();
+            append_log_line(&format!("[Shortcut] matched: {binding_label}"));
             start_overlay_session(state, required_groups.len());
         }
         (true, false) => {
+            let binding_label = state.binding_label.lock().unwrap().clone();
+            append_log_line(&format!("[Shortcut] released: {binding_label}"));
             stop_overlay_session(state, "binding_released");
         }
         _ => {}
@@ -115,7 +166,6 @@ fn handle_binding_state(state: &Arc<HookSharedState>) {
 
 fn start_overlay_session(state: &Arc<HookSharedState>, required_group_count: usize) {
     if let Some(app_handle) = state.app_handle.lock().unwrap().clone() {
-        // Require authentication before starting recording
         if let Ok(app_state) = app_handle.state::<AppState>().cached_access_token.lock() {
             if app_state.is_none() {
                 append_log_line("[Shortcut] rejected: no cached access token (user not signed in)");
@@ -134,15 +184,11 @@ fn start_overlay_session(state: &Arc<HookSharedState>, required_group_count: usi
             .unwrap_or(false);
         append_log_line(&format!("[Shortcut] recording start overlay_ready={overlay_ready}"));
 
-        if let Err(error) = ensure_overlay_window(&app_handle, true) {
-            append_log_line(&format!("[Overlay] show failed: {error}"));
+        if let Err(error) = crate::ensure_overlay_event_target(&app_handle) {
+            append_log_line(&format!("[Overlay] failed to prepare event target: {error}"));
+            return;
         }
-        if let Some(window) = app_handle.get_webview_window("overlay") {
-            let _ = window.set_shadow(false);
-            let _ = window.set_background_color(Some(Color(0, 0, 0, 0)));
-            let _ = window.set_always_on_top(true);
-        }
-        emit_transcription_prefetch(&app_handle);
+
         app_handle.emit("recording-started", ()).ok();
     }
 }
@@ -164,11 +210,15 @@ unsafe extern "system" fn low_level_keyboard_proc(
     if code == HC_ACTION as i32 {
         let state = shared_state();
         let keyboard = *(l_param.0 as *const KBDLLHOOKSTRUCT);
-        if keyboard.flags.contains(LLKHF_INJECTED) {
-            return CallNextHookEx(HHOOK::default(), code, w_param, l_param);
-        }
         let vk = keyboard.vkCode as u16;
         let message = w_param.0 as u32;
+        let injected = keyboard.flags.contains(LLKHF_INJECTED);
+        if is_key_event(message) {
+            log_relevant_key_event(&state, vk, message, injected);
+        }
+        if injected {
+            return CallNextHookEx(HHOOK::default(), code, w_param, l_param);
+        }
         if is_key_event(message) {
             update_pressed_keys(&state, vk, message);
             handle_binding_state(&state);
@@ -347,6 +397,7 @@ impl HotkeyBackend for WindowsHookHotkeyBackend {
             platform: std::env::consts::OS.to_string(),
             backend_tier: "native".to_string(),
             planned_native_backend: None,
+            supports_modifier_only: true,
             supports_function_keys: true,
             supports_navigation_keys: true,
             supports_mouse_buttons: true,
@@ -389,6 +440,7 @@ impl HotkeyBackend for WindowsHookHotkeyBackend {
         *state.pressed_keys.lock().unwrap() = HashSet::new();
         state.active.store(false, Ordering::SeqCst);
         *state.app_handle.lock().unwrap() = Some(app.clone());
+        append_log_line(&format!("[Shortcut] registered: {}", binding));
 
         if let Some(error) = state.last_error.lock().unwrap().clone() {
             return Err(error);

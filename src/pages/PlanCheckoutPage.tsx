@@ -1,10 +1,10 @@
-import { ChevronLeft, RefreshCw, ShieldCheck, Store } from "lucide-react";
+import { ChevronLeft, RefreshCw, ShieldCheck, Sparkles, Store } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { AppShell } from "@/components/AppShell";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { useAuth } from "@/contexts/useAuth";
 import type { AppLocale } from "@/lib/appLocale";
 import {
@@ -12,8 +12,6 @@ import {
   readStoreBillingStatus,
   type StoreBillingStatus,
 } from "@/lib/storeBilling";
-
-type PlanKey = "free" | "plus";
 
 const NAV_ITEMS = [
   { id: "home", label: { en: "Home", ja: "ホーム", es: "Inicio" } },
@@ -23,123 +21,82 @@ const NAV_ITEMS = [
 
 const COPY = {
   en: {
-    header: "Checkout",
     back: "Back",
-    plan: "Plan",
-    terms: "Terms",
-    email: "Email",
-    billing: "Billing",
-    billingBody: "Payment is handled by Microsoft Store. Card details are never collected in WhisperType.",
-    storeReady: "This packaged build can use Microsoft Store billing.",
-    storeUnavailable: "Microsoft Store billing is available only in the packaged Store build.",
-    productConfigured: "Plus subscription product is configured.",
-    productMissing: "Plus subscription product is not configured yet.",
-    refreshLicense: "Refresh license",
-    licenseActive: "Subscription active",
-    licenseInactive: "Subscription not active",
-    purchaseIntro: "Start a monthly Microsoft Store subscription for WhisperType Plus.",
-    purchaseButton: "Subscribe in Microsoft Store",
-    purchasePending: "Processing...",
-    purchaseIncomplete: "Purchase was not completed.",
-    purchaseFailed: "Failed to purchase through Microsoft Store.",
-    productNotConfigured: "Store product ID is not configured yet. Add it after creating the subscription add-on in Partner Center.",
-    storeBuildRequired: "Use the packaged Microsoft Store build to test purchases.",
-    plans: {
-      free: {
-        title: "Free",
-        price: "$0 / month",
-        features: ["50 daily credits", "Bonus credits after daily credits", "Recent history"],
-        terms: ["Daily credits reset once per day", "No payment required"],
-      },
-      plus: {
-        title: "WhisperType Plus",
-        price: "¥300 / month",
-        features: ["Unlimited transcription billing", "500 transcriptions per day", "Billed through Microsoft Store"],
-        terms: ["Monthly subscription add-on", "Cancel from Microsoft account services", "Store refund policy applies"],
-      },
-    },
+    eyebrow: "WhisperType Plus",
+    title: "Transcribe as much as you need.",
+    subtitle: "A simple monthly plan for heavy daily use.",
+    price: "¥300 / month",
+    cta: "Subscribe with Microsoft Store",
+    pending: "Processing...",
+    refresh: "Refresh license",
+    active: "Plus is active",
+    inactive: "Plus is not active",
+    storeNote: "Payment and cancellation are handled by Microsoft Store.",
+    privacyNote: "WhisperType does not store card information.",
+    unavailable: "Purchases are available in the Microsoft Store build.",
+    notConfigured: "Microsoft Store subscription is not connected yet.",
+    incomplete: "Purchase was not completed.",
+    failed: "Purchase failed. Please try again.",
+    email: "Signed in as",
+    benefits: [
+      "Unlimited transcription billing",
+      "Built for heavy daily use",
+      "Cancel anytime from your Microsoft account",
+    ],
   },
   ja: {
-    header: "購入",
     back: "戻る",
-    plan: "プラン",
-    terms: "利用条件",
-    email: "メール",
-    billing: "決済",
-    billingBody: "決済は Microsoft Store が処理します。WhisperType 内でカード情報は保存しません。",
-    storeReady: "このパッケージ版では Microsoft Store 決済を利用できます。",
-    storeUnavailable: "Microsoft Store 決済は Store 用にパッケージ化したビルドでのみ利用できます。",
-    productConfigured: "Plus サブスクリプション商品は設定済みです。",
-    productMissing: "Plus サブスクリプション商品はまだ設定されていません。",
-    refreshLicense: "ライセンスを更新",
-    licenseActive: "サブスクリプション有効",
-    licenseInactive: "サブスクリプション未確認",
-    purchaseIntro: "WhisperType Plus の月額サブスクリプションを Microsoft Store で開始します。",
-    purchaseButton: "Microsoft Store で登録",
-    purchasePending: "処理中...",
-    purchaseIncomplete: "購入は完了していません。",
-    purchaseFailed: "Microsoft Store での購入に失敗しました。",
-    productNotConfigured: "Store 商品IDが未設定です。Partner Center でサブスクリプション add-on を作成した後に設定してください。",
-    storeBuildRequired: "購入テストには Microsoft Store 用にパッケージ化したビルドを使ってください。",
-    plans: {
-      free: {
-        title: "フリー",
-        price: "¥0 / 月",
-        features: ["毎日 50 クレジット", "デイリー消費後はボーナスクレジットを使用", "最近の履歴"],
-        terms: ["デイリークレジットは1日1回リセット", "支払い不要"],
-      },
-      plus: {
-        title: "WhisperType Plus",
-        price: "¥300 / 月",
-        features: ["課金上は文字起こし無制限", "1日500回まで", "Microsoft Store 経由で決済"],
-        terms: ["月額サブスクリプション add-on", "Microsoft アカウントのサービス画面から解約", "返金は Store ポリシーに準拠"],
-      },
-    },
+    eyebrow: "WhisperType Plus",
+    title: "毎日の文字起こしを、もっと自由に。",
+    subtitle: "よく使う人向けの月額プランです。",
+    price: "¥300 / 月",
+    cta: "Microsoft Store で登録",
+    pending: "処理中...",
+    refresh: "ライセンスを更新",
+    active: "Plus が有効です",
+    inactive: "Plus は未確認です",
+    storeNote: "決済と解約は Microsoft Store で管理されます。",
+    privacyNote: "WhisperType がカード情報を保存することはありません。",
+    unavailable: "購入は Microsoft Store 版のアプリで利用できます。",
+    notConfigured: "Microsoft Store のサブスクリプションは未接続です。",
+    incomplete: "購入は完了していません。",
+    failed: "購入に失敗しました。もう一度お試しください。",
+    email: "ログイン中",
+    benefits: [
+      "文字起こしの課金上限なし",
+      "毎日たっぷり使えます",
+      "Microsoft アカウントからいつでも解約",
+    ],
   },
   es: {
-    header: "Pago",
     back: "Volver",
-    plan: "Plan",
-    terms: "Términos",
-    email: "Correo",
-    billing: "Facturación",
-    billingBody: "Microsoft Store procesa el pago. WhisperType no recoge datos de tarjeta.",
-    storeReady: "Esta compilación empaquetada puede usar la facturación de Microsoft Store.",
-    storeUnavailable: "La facturación de Microsoft Store solo está disponible en la compilación empaquetada.",
-    productConfigured: "El producto de suscripción Plus está configurado.",
-    productMissing: "El producto de suscripción Plus todavía no está configurado.",
-    refreshLicense: "Actualizar licencia",
-    licenseActive: "Suscripción activa",
-    licenseInactive: "Suscripción no activa",
-    purchaseIntro: "Inicia una suscripción mensual de Microsoft Store para WhisperType Plus.",
-    purchaseButton: "Suscribirse en Microsoft Store",
-    purchasePending: "Procesando...",
-    purchaseIncomplete: "La compra no se completó.",
-    purchaseFailed: "No se pudo comprar en Microsoft Store.",
-    productNotConfigured: "Falta el Store product ID. Añádelo después de crear el add-on de suscripción en Partner Center.",
-    storeBuildRequired: "Usa la compilación empaquetada de Microsoft Store para probar compras.",
-    plans: {
-      free: {
-        title: "Free",
-        price: "$0 / mes",
-        features: ["50 créditos diarios", "Créditos bonus después de los diarios", "Historial reciente"],
-        terms: ["Los créditos diarios se reinician una vez al día", "No requiere pago"],
-      },
-      plus: {
-        title: "WhisperType Plus",
-        price: "¥300 / mes",
-        features: ["Transcripción ilimitada para facturación", "500 transcripciones al día", "Cobro con Microsoft Store"],
-        terms: ["Add-on de suscripción mensual", "Cancela desde los servicios de tu cuenta Microsoft", "Reembolsos según política de Store"],
-      },
-    },
+    eyebrow: "WhisperType Plus",
+    title: "Transcribe todo lo que necesites.",
+    subtitle: "Un plan mensual simple para uso diario intensivo.",
+    price: "¥300 / mes",
+    cta: "Suscribirse con Microsoft Store",
+    pending: "Procesando...",
+    refresh: "Actualizar licencia",
+    active: "Plus activo",
+    inactive: "Plus no activo",
+    storeNote: "Microsoft Store gestiona el pago y la cancelación.",
+    privacyNote: "WhisperType no guarda datos de tarjeta.",
+    unavailable: "Las compras están disponibles en la versión de Microsoft Store.",
+    notConfigured: "La suscripción de Microsoft Store todavía no está conectada.",
+    incomplete: "La compra no se completó.",
+    failed: "No se pudo completar la compra. Inténtalo de nuevo.",
+    email: "Sesión iniciada como",
+    benefits: [
+      "Transcripción ilimitada para facturación",
+      "Diseñado para uso diario intensivo",
+      "Cancela cuando quieras desde tu cuenta Microsoft",
+    ],
   },
 } as const;
 
 export default function PlanCheckoutPage({ appLocale }: { appLocale: AppLocale }) {
   const navigate = useNavigate();
-  const location = useLocation();
   const { profile, refreshProfile } = useAuth();
-  const plan = ((location.state as { plan?: PlanKey } | null)?.plan ?? "plus") as PlanKey;
   const copy = COPY[appLocale];
   const [billingStatus, setBillingStatus] = useState<StoreBillingStatus | null>(null);
   const [isPurchasing, setIsPurchasing] = useState(false);
@@ -153,10 +110,11 @@ export default function PlanCheckoutPage({ appLocale }: { appLocale: AppLocale }
   );
 
   const purchaseHint = useMemo(() => {
-    if (!billingStatus?.isStoreBuild) return copy.storeBuildRequired;
-    if (!billingStatus.isProductConfigured) return copy.productNotConfigured;
+    if (!billingStatus) return "";
+    if (!billingStatus.isStoreBuild) return copy.unavailable;
+    if (!billingStatus.isProductConfigured) return copy.notConfigured;
     return "";
-  }, [billingStatus, copy.productNotConfigured, copy.storeBuildRequired]);
+  }, [billingStatus, copy.notConfigured, copy.unavailable]);
 
   const loadBillingStatus = async () => {
     const status = await readStoreBillingStatus();
@@ -189,7 +147,7 @@ export default function PlanCheckoutPage({ appLocale }: { appLocale: AppLocale }
     try {
       const success = await invoke<boolean>("purchase_plus_via_store");
       if (!success) {
-        setPurchaseError(copy.purchaseIncomplete);
+        setPurchaseError(copy.incomplete);
         return;
       }
 
@@ -200,10 +158,10 @@ export default function PlanCheckoutPage({ appLocale }: { appLocale: AppLocale }
       const code = getStorePurchaseErrorMessage(error);
       setPurchaseError(
         code === "store_product_not_configured"
-          ? copy.productNotConfigured
+          ? copy.notConfigured
           : code === "store_build_required"
-            ? copy.storeBuildRequired
-            : copy.purchaseFailed
+            ? copy.unavailable
+            : copy.failed
       );
     } finally {
       setIsPurchasing(false);
@@ -218,101 +176,110 @@ export default function PlanCheckoutPage({ appLocale }: { appLocale: AppLocale }
       onNavItemClick={(id) => navigate(`/${id}`)}
       headerActions={null}
     >
-      <div className="space-y-6">
+      <div className="mx-auto max-w-[1100px] space-y-5">
         <Button type="button" variant="ghost" className="w-fit rounded-full px-3" onClick={() => navigate(-1)}>
           <ChevronLeft className="h-4 w-4" />
           {copy.back}
         </Button>
 
-        <Card className="rounded-[30px] border border-white/40 bg-white/70 shadow-[0_18px_40px_rgba(15,23,42,0.06)] backdrop-blur-2xl dark:border-white/10 dark:bg-white/6">
-          <CardHeader className="pb-3">
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">{copy.header}</p>
-            <CardTitle className="text-3xl font-semibold tracking-tight text-slate-950 dark:text-slate-50">
-              {copy.plans[plan].title}
-            </CardTitle>
-          </CardHeader>
-
-          <CardContent className="grid gap-6 lg:grid-cols-[0.95fr_1.05fr]">
-            <div className="space-y-4 rounded-[24px] border border-black/8 bg-white/75 p-5 dark:border-white/8 dark:bg-white/5">
-              <div className="space-y-2">
-                <p className="text-sm text-slate-500 dark:text-slate-400">{copy.plan}</p>
-                <p className="text-2xl font-semibold text-slate-950 dark:text-slate-50">{copy.plans[plan].title}</p>
-                <p className="text-sm font-medium text-slate-500 dark:text-slate-400">{copy.plans[plan].price}</p>
-              </div>
-
-              <div className="space-y-2">
-                {copy.plans[plan].features.map((feature) => (
-                  <div key={feature} className="flex items-start gap-2 text-sm text-slate-700 dark:text-slate-200">
-                    <span className="mt-1 h-1.5 w-1.5 rounded-full bg-slate-400" />
-                    <span>{feature}</span>
+        <Card className="overflow-hidden rounded-[34px] border border-white/50 bg-white py-0 shadow-[0_24px_70px_rgba(15,23,42,0.08)] backdrop-blur-2xl dark:border-white/10 dark:bg-[#101116]">
+          <CardContent className="grid gap-0 p-0 lg:grid-cols-[0.92fr_1.08fr]">
+            <section className="relative min-h-[500px] overflow-hidden bg-[radial-gradient(circle_at_18%_12%,rgba(14,165,233,0.18),transparent_34%),radial-gradient(circle_at_80%_88%,rgba(110,231,183,0.24),transparent_34%),linear-gradient(135deg,#f8fafc_0%,#eef6f4_100%)] p-8 dark:bg-[radial-gradient(circle_at_18%_12%,rgba(125,211,252,0.12),transparent_34%),linear-gradient(135deg,#111318_0%,#171a20_100%)] lg:p-9">
+              <div className="absolute -bottom-20 -right-16 h-64 w-64 rounded-full bg-emerald-200/45 blur-3xl dark:bg-cyan-400/10" />
+              <div className="relative flex h-full flex-col justify-between">
+                <div className="space-y-6">
+                  <div className="inline-flex items-center gap-2 rounded-full border border-black/8 bg-white/70 px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.18em] text-slate-500 shadow-sm dark:border-white/10 dark:bg-white/8 dark:text-slate-300">
+                    <Sparkles className="h-3.5 w-3.5" />
+                    {copy.eyebrow}
                   </div>
-                ))}
-              </div>
 
-              <div className="rounded-[20px] border border-black/8 bg-white/80 p-4 text-sm leading-6 text-slate-600 dark:border-white/8 dark:bg-[#17181c] dark:text-slate-300">
-                <p className="font-semibold text-slate-900 dark:text-slate-100">{copy.terms}</p>
-                <ul className="mt-2 space-y-1.5">
-                  {copy.plans[plan].terms.map((term) => (
-                    <li key={term}>- {term}</li>
-                  ))}
-                </ul>
-              </div>
+                  <div className="max-w-[460px] space-y-4">
+                    <h1 className="text-[2.45rem] font-semibold leading-[1.14] tracking-tight text-slate-950 dark:text-white">
+                      {copy.title}
+                    </h1>
+                    <p className="text-base leading-7 text-slate-600 dark:text-slate-300">{copy.subtitle}</p>
+                  </div>
 
-              {profile?.email ? (
-                <div className="rounded-[20px] border border-black/8 bg-white/70 p-4 text-sm text-slate-600 dark:border-white/8 dark:bg-white/5 dark:text-slate-300">
-                  <p className="text-xs uppercase tracking-[0.18em] text-slate-400">{copy.email}</p>
-                  <p className="mt-1 font-medium text-slate-900 dark:text-slate-100">{profile.email}</p>
+                  <div className="space-y-3">
+                    {copy.benefits.map((benefit) => (
+                      <div key={benefit} className="flex items-center gap-3 text-sm font-medium text-slate-800 dark:text-slate-100">
+                        <span className="flex h-6 w-6 items-center justify-center rounded-full bg-slate-950 text-white dark:bg-white dark:text-slate-950">
+                          <ShieldCheck className="h-3.5 w-3.5" />
+                        </span>
+                        <span>{benefit}</span>
+                      </div>
+                    ))}
+                  </div>
                 </div>
-              ) : null}
-            </div>
 
-            <div className="space-y-4">
-              <div className="rounded-[24px] border border-black/8 bg-white/75 p-5 text-sm leading-6 text-slate-600 dark:border-white/8 dark:bg-white/5 dark:text-slate-300">
-                <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
-                  <Store className="h-4 w-4" />
-                  {copy.billing}
+                <div className="relative mt-9 rounded-[26px] border border-white/70 bg-white/72 p-5 shadow-[0_18px_50px_rgba(15,23,42,0.08)] dark:border-white/10 dark:bg-black/20">
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <p className="text-sm font-medium text-slate-500 dark:text-slate-400">WhisperType Plus</p>
+                      <p className="mt-2 text-4xl font-semibold tracking-tight text-slate-950 dark:text-white">{copy.price}</p>
+                    </div>
+                    <span className="rounded-full bg-slate-950 px-3 py-1 text-xs font-semibold text-white dark:bg-white dark:text-slate-950">
+                      Plus
+                    </span>
+                  </div>
+                  {profile?.email ? (
+                    <p className="mt-4 text-xs text-slate-500 dark:text-slate-400">
+                      {copy.email}: <span className="font-medium text-slate-800 dark:text-slate-200">{profile.email}</span>
+                    </p>
+                  ) : null}
                 </div>
-                <p className="mt-3 font-medium text-slate-900 dark:text-slate-100">Microsoft Store</p>
-                <p className="mt-2">{copy.billingBody}</p>
-                <p className="mt-2">{billingStatus?.isStoreBuild ? copy.storeReady : copy.storeUnavailable}</p>
-                <p className="mt-1">
-                  {billingStatus?.isProductConfigured ? copy.productConfigured : copy.productMissing}
-                </p>
-                <div className="mt-3 flex flex-wrap items-center gap-2">
-                  <Button type="button" variant="outline" size="sm" onClick={() => void refreshLicense()} disabled={isRefreshingLicense}>
-                    <RefreshCw className={`h-4 w-4 ${isRefreshingLicense ? "animate-spin" : ""}`} />
-                    {copy.refreshLicense}
+              </div>
+            </section>
+
+            <section className="flex flex-col justify-center border-t border-black/6 bg-white p-7 dark:border-white/8 dark:bg-[#101116] lg:border-l lg:border-t-0 lg:p-9">
+              <div className="rounded-[30px] border border-black/8 bg-white/82 p-6 shadow-[0_18px_52px_rgba(15,23,42,0.06)] dark:border-white/8 dark:bg-white/5">
+                <div className="flex items-start justify-between gap-5">
+                  <div>
+                    <div className="flex items-center gap-2 text-sm font-semibold text-slate-900 dark:text-slate-100">
+                      <Store className="h-4 w-4 text-slate-500" />
+                      Microsoft Store
+                    </div>
+                    <p className="mt-3 text-sm leading-6 text-slate-600 dark:text-slate-300">{copy.storeNote}</p>
+                  </div>
+                  <div className="shrink-0 rounded-2xl bg-slate-50 px-4 py-3 text-right dark:bg-white/8">
+                    <p className="text-xs font-medium text-slate-500 dark:text-slate-400">Plus</p>
+                    <p className="mt-1 text-lg font-semibold text-slate-950 dark:text-white">{copy.price}</p>
+                  </div>
+                </div>
+
+                <div className="mt-6 rounded-[24px] border border-black/6 bg-slate-50/82 p-4 dark:border-white/8 dark:bg-black/18">
+                  <Button
+                    type="button"
+                    disabled={isPurchasing || !canPurchase}
+                    onClick={handleStorePurchase}
+                    className="h-12 w-full rounded-2xl bg-slate-950 text-base font-semibold text-white shadow-[0_12px_28px_rgba(15,23,42,0.20)] hover:bg-slate-800 disabled:bg-slate-400 disabled:text-white dark:bg-white dark:text-slate-950 dark:hover:bg-slate-100 dark:disabled:bg-white/30 dark:disabled:text-white/70"
+                  >
+                    {isPurchasing ? copy.pending : copy.cta}
                   </Button>
+
+                  {purchaseError ? <p className="mt-3 text-xs text-rose-600 dark:text-rose-300">{purchaseError}</p> : null}
+                  {!purchaseError && purchaseHint ? <p className="mt-3 text-xs text-slate-500 dark:text-slate-400">{purchaseHint}</p> : null}
+                </div>
+
+                <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-black/6 pt-4 dark:border-white/8">
                   <span
-                    className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-medium ${
+                    className={`text-sm font-medium ${
                       billingStatus?.hasLicense
-                        ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
-                        : "bg-slate-500/10 text-slate-600 dark:text-slate-300"
+                        ? "text-emerald-700 dark:text-emerald-300"
+                        : "text-slate-600 dark:text-slate-300"
                     }`}
                   >
-                    {billingStatus?.hasLicense ? copy.licenseActive : copy.licenseInactive}
+                    {billingStatus?.hasLicense ? copy.active : copy.inactive}
                   </span>
+                  <Button type="button" variant="outline" size="sm" onClick={() => void refreshLicense()} disabled={isRefreshingLicense}>
+                    <RefreshCw className={`h-4 w-4 ${isRefreshingLicense ? "animate-spin" : ""}`} />
+                    {copy.refresh}
+                  </Button>
                 </div>
-              </div>
 
-              <div className="rounded-[24px] border border-black/8 bg-white/75 p-5 text-sm leading-6 text-slate-600 dark:border-white/8 dark:bg-white/5 dark:text-slate-300">
-                <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
-                  <ShieldCheck className="h-4 w-4" />
-                  WhisperType Plus
-                </div>
-                <p className="mt-3">{copy.purchaseIntro}</p>
-                <Button
-                  type="button"
-                  disabled={isPurchasing || !canPurchase}
-                  onClick={handleStorePurchase}
-                  className="mt-4 h-12 w-full rounded-2xl bg-black text-white hover:bg-black/90 dark:bg-white dark:text-black dark:hover:bg-white/90"
-                >
-                  {isPurchasing ? copy.purchasePending : copy.purchaseButton}
-                </Button>
-                {purchaseError ? <p className="mt-3 text-xs text-rose-600 dark:text-rose-300">{purchaseError}</p> : null}
-                {!purchaseError && purchaseHint ? <p className="mt-3 text-xs text-slate-500 dark:text-slate-400">{purchaseHint}</p> : null}
+                <p className="mt-4 text-xs leading-5 text-slate-500 dark:text-slate-400">{copy.privacyNote}</p>
               </div>
-            </div>
+            </section>
           </CardContent>
         </Card>
       </div>

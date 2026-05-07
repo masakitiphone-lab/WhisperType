@@ -97,7 +97,7 @@ export function AppShell({
 
   return (
     <div className="relative h-screen overflow-hidden bg-[#fafafa] text-slate-900 dark:bg-[#0f1115] dark:text-slate-50">
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_18%_12%,rgba(255,255,255,0.9),transparent_28%),radial-gradient(circle_at_82%_16%,rgba(255,255,255,0.55),transparent_24%),radial-gradient(circle_at_50%_110%,rgba(226,232,240,0.7),transparent_28%)] dark:bg-[radial-gradient(circle_at_18%_12%,rgba(255,255,255,0.06),transparent_28%),radial-gradient(circle_at_82%_16%,rgba(96,165,250,0.12),transparent_24%),radial-gradient(circle_at_50%_110%,rgba(148,163,184,0.1),transparent_30%)]" />
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_18%_12%,rgba(248,250,252,0.42),transparent_28%),radial-gradient(circle_at_82%_16%,rgba(241,245,249,0.32),transparent_24%),radial-gradient(circle_at_50%_110%,rgba(226,232,240,0.7),transparent_28%)] dark:bg-[radial-gradient(circle_at_18%_12%,rgba(255,255,255,0.06),transparent_28%),radial-gradient(circle_at_82%_16%,rgba(96,165,250,0.12),transparent_24%),radial-gradient(circle_at_50%_110%,rgba(148,163,184,0.1),transparent_30%)]" />
       {isSignOutDialogOpen ? (
         <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/28 px-4 backdrop-blur-[3px]">
           <div className="w-full max-w-md rounded-[28px] border border-black/8 bg-white/96 p-6 shadow-[0_24px_80px_rgba(15,23,42,0.18)] dark:border-white/10 dark:bg-[#121316]/96">
@@ -228,7 +228,6 @@ export function AppShell({
         </aside>
 
         <main className="relative min-w-0 flex-1 overflow-y-auto px-8 py-7 scroll-smooth">
-          <div className="pointer-events-none absolute inset-x-10 top-8 h-40 rounded-[40px] bg-[radial-gradient(circle_at_20%_20%,rgba(255,255,255,0.78),transparent_32%),radial-gradient(circle_at_80%_40%,rgba(191,219,254,0.35),transparent_26%),linear-gradient(135deg,rgba(255,255,255,0.4),rgba(255,255,255,0.08))] blur-3xl dark:bg-[radial-gradient(circle_at_20%_20%,rgba(255,255,255,0.05),transparent_32%),radial-gradient(circle_at_80%_40%,rgba(99,102,241,0.16),transparent_26%),linear-gradient(135deg,rgba(255,255,255,0.05),rgba(255,255,255,0.01))]" />
           <div className="mx-auto max-w-6xl">
             {headerActions || eyebrow || title || description ? (
               <header className="mb-6 flex items-start justify-between gap-6">

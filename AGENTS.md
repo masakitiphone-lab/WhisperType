@@ -15,7 +15,8 @@
   - If both are zero, transcription must be blocked before preprocessing.
 - Plus plan:
   - Do not check credits.
-  - Treat transcription as unlimited for billing, but cap usage at 500 transcriptions per day.
+  - Treat transcription as unlimited for billing and user-facing copy.
+  - Keep the abuse-protection cap internal at 999 transcriptions per day; do not show that number in UI or public copy.
 
 ## Current release rules
 - Microsoft Store Plus is an in-app subscription add-on for the free app.
@@ -23,7 +24,7 @@
 - Set `WHISPERTYPE_PLUS_STORE_ID` at build time after creating the Partner Center subscription add-on.
 - Until the Store product ID is configured, purchase UI must stay disabled and return a clear `store_product_not_configured` state.
 - The production desktop OAuth callback uses `whispertype://auth/callback`.
-- The production browser landing page after Google login is `http://retirecurl.app`.
+- The production browser landing page after Google login is `https://studio-mirai.vercel.app/whispertype/redirect/`.
 - `VITE_TRANSCRIBE_URL` still needs live confirmation before release.
 - Cloudflare Worker is the only transcription endpoint; Supabase Edge Functions are not used for transcription.
 - Worker must validate the Supabase access token sent by the app before sending audio to Groq.

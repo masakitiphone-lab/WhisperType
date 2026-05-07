@@ -28,6 +28,24 @@ pub struct VadDetectionResult {
     speech_frames: usize,
 }
 
+struct TempAudioFiles {
+    paths: Vec<PathBuf>,
+}
+
+impl TempAudioFiles {
+    fn new(paths: Vec<PathBuf>) -> Self {
+        Self { paths }
+    }
+}
+
+impl Drop for TempAudioFiles {
+    fn drop(&mut self) {
+        for path in &self.paths {
+            let _ = fs::remove_file(path);
+        }
+    }
+}
+
 fn temp_audio_dir() -> Result<PathBuf, String> {
     let mut dir = std::env::temp_dir();
     dir.push("whispertype-audio-processing");
@@ -146,11 +164,12 @@ fn run_ffmpeg(args: &[&str]) -> Result<Output, String> {
     Ok(output)
 }
 
-fn decode_webm_to_pcm_wav(bytes: &[u8]) -> Result<(PathBuf, Vec<i16>, u32), String> {
+fn decode_webm_to_pcm_wav(bytes: &[u8]) -> Result<(PathBuf, TempAudioFiles, Vec<i16>, u32), String> {
     let dir = temp_audio_dir()?;
     let stamp = timestamp_millis()?;
     let input_path = dir.join(format!("whispertype-vad-input-{stamp}.webm"));
     let output_path = dir.join(format!("whispertype-vad-output-{stamp}.wav"));
+    let temp_files = TempAudioFiles::new(vec![input_path.clone(), output_path.clone()]);
     let sample_rate = TARGET_SAMPLE_RATE_HZ.to_string();
     let channels = TARGET_CHANNELS.to_string();
 
@@ -186,7 +205,7 @@ fn decode_webm_to_pcm_wav(bytes: &[u8]) -> Result<(PathBuf, Vec<i16>, u32), Stri
 
     let wav_bytes = fs::read(&output_path).map_err(|error| error.to_string())?;
     if wav_bytes.len() <= 44 {
-        return Ok((output_path, Vec::new(), 16_000));
+        return Ok((input_path, temp_files, Vec::new(), 16_000));
     }
 
     let mut samples = Vec::with_capacity((wav_bytes.len().saturating_sub(44)) / 2);
@@ -194,7 +213,7 @@ fn decode_webm_to_pcm_wav(bytes: &[u8]) -> Result<(PathBuf, Vec<i16>, u32), Stri
         samples.push(i16::from_le_bytes([chunk[0], chunk[1]]));
     }
 
-    Ok((output_path, samples, 16_000))
+    Ok((input_path, temp_files, samples, 16_000))
 }
 
 fn detect_speech_frames(
@@ -242,13 +261,13 @@ fn detect_speech_frames(
 
 #[tauri::command]
 pub fn detect_speech_with_vad(bytes: Vec<u8>) -> Result<VadDetectionResult, String> {
-    let (_, samples, sample_rate_hz) = decode_webm_to_pcm_wav(&bytes)?;
+    let (_, _temp_files, samples, sample_rate_hz) = decode_webm_to_pcm_wav(&bytes)?;
     detect_speech_frames(&samples, sample_rate_hz, API_GATE_VAD_MIN_SPEECH_FRAMES)
 }
 
 #[tauri::command]
 pub fn process_audio_with_ffmpeg(bytes: Vec<u8>) -> Result<Vec<u8>, String> {
-    let (input_path, samples, sample_rate_hz) = decode_webm_to_pcm_wav(&bytes)?;
+    let (input_path, mut temp_files, samples, sample_rate_hz) = decode_webm_to_pcm_wav(&bytes)?;
     if samples.is_empty() {
         append_log_line("[FFmpeg] decoded audio was empty; using original recording");
         return Ok(bytes);
@@ -269,6 +288,7 @@ pub fn process_audio_with_ffmpeg(bytes: Vec<u8>) -> Result<Vec<u8>, String> {
     let dir = temp_audio_dir()?;
     let stamp = timestamp_millis()?;
     let output_path = dir.join(format!("whispertype-output-{stamp}.webm"));
+    temp_files.paths.push(output_path.clone());
     let sample_rate = TARGET_SAMPLE_RATE_HZ.to_string();
     let channels = TARGET_CHANNELS.to_string();
 

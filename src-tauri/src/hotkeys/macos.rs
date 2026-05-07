@@ -552,7 +552,13 @@ fn emit_native_binding_transition() {
     };
 
     if is_active {
-        // Require authentication before starting recording
+        let binding_label = state
+            .binding_label
+            .lock()
+            .unwrap()
+            .clone()
+            .unwrap_or_else(|| "unknown".to_string());
+        crate::shared::log::append_log_line(&format!("[Shortcut] matched: {binding_label}"));
         if let Ok(app_state) = app_handle.state::<crate::AppState>().cached_access_token.lock() {
             if app_state.is_none() {
                 crate::shared::log::append_log_line("[Shortcut] rejected: no cached access token (user not signed in)");
@@ -561,8 +567,20 @@ fn emit_native_binding_transition() {
                 return;
             }
         }
+        if let Err(error) = crate::ensure_overlay_event_target(&app_handle) {
+            crate::shared::log::append_log_line(&format!("[Overlay] failed to prepare event target: {error}"));
+            return;
+        }
+
         app_handle.emit("recording-started", ()).ok();
     } else {
+        let binding_label = state
+            .binding_label
+            .lock()
+            .unwrap()
+            .clone()
+            .unwrap_or_else(|| "unknown".to_string());
+        crate::shared::log::append_log_line(&format!("[Shortcut] released: {binding_label}"));
         app_handle.emit("recording-stopped", ()).ok();
     }
 }
@@ -636,6 +654,7 @@ impl HotkeyBackend for MacosNativeHotkeyBackend {
             platform: std::env::consts::OS.to_string(),
             backend_tier: "native".to_string(),
             planned_native_backend: None,
+            supports_modifier_only: true,
             supports_function_keys: true,
             supports_navigation_keys: true,
             supports_mouse_buttons: true,
@@ -689,6 +708,7 @@ impl HotkeyBackend for MacosNativeHotkeyBackend {
         state.active_mouse_buttons.lock().unwrap().clear();
         *state.binding_is_active.lock().unwrap() = false;
         *state.app_handle.lock().unwrap() = Some(app.clone());
+        crate::shared::log::append_log_line(&format!("[Shortcut] registered: {}", binding));
         if report.ready_for_event_tap_wiring {
             if event_tap_symbols_available() {
                 update_native_runtime_status("ready-for-event-tap-install");

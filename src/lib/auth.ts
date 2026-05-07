@@ -1,13 +1,13 @@
-const releaseAuthRedirectUrl = "http://retirecurl.app";
 const releaseDesktopAuthRedirectUrl = "whispertype://auth/callback";
 const devAuthRedirectUrl = "whispertype://auth/callback";
 
-const defaultAuthRedirectUrl = import.meta.env.DEV
-  ? devAuthRedirectUrl
-  : releaseAuthRedirectUrl;
+const configuredAuthRedirectUrl = import.meta.env.VITE_AUTH_REDIRECT_URL?.replace(/\/$/, "");
+
+if (!import.meta.env.DEV && !configuredAuthRedirectUrl) {
+  throw new Error("release_auth_redirect_url_required");
+}
 
 export const authRedirectUrl =
-  import.meta.env.VITE_AUTH_REDIRECT_URL?.replace(/\/$/, "") ||
-  defaultAuthRedirectUrl;
+  configuredAuthRedirectUrl || devAuthRedirectUrl;
 
 export const desktopAuthRedirectUrl = releaseDesktopAuthRedirectUrl;

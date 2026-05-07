@@ -2,7 +2,6 @@ import { invoke } from "@tauri-apps/api/core";
 import { supabase } from "@/lib/supabase";
 import { preprocessAudioBlobForTranscription } from "@/lib/audioPreprocess";
 import { readStoredAuthSessionSnapshot } from "@/lib/authStorage";
-import { hasLocalPlusLicense } from "@/lib/storeLicense";
 import { buildTranscriptionSettingsPayload, readTranscriptionSettings } from "@/lib/transcription";
 import { getAudioFileName } from "@/services/audio";
 
@@ -111,7 +110,6 @@ async function getUsableAccessToken() {
       return cachedToken;
     }
   } catch {
-    // ignore cached token lookup failures and fall through
   }
 
   let {
@@ -184,29 +182,32 @@ async function getTranscriptionContext(userId: string, accessToken: string): Pro
     throw new Error("profile_unavailable: missing_supabase_rest_config");
   }
 
-  const hasStorePlus = await hasLocalPlusLicense();
-
   const buildContextFromRow = (row: {
     user_id: string;
     daily_credits: number | null;
     bonus_credits: number | null;
+    plan?: string | null;
+    available_credits?: number | null;
+    is_unlimited?: boolean | null;
   }): TranscriptionContext => {
     if (row.user_id !== userId) {
       throw new Error(`profile_unavailable: user mismatch context=${row.user_id} token=${userId}`);
     }
 
+    const isUnlimited = row.is_unlimited === true || row.plan === "plus";
     return {
       user_id: row.user_id,
       daily_credits: row.daily_credits ?? 0,
       bonus_credits: row.bonus_credits ?? 0,
-      available_credits: hasStorePlus ? null : (row.daily_credits ?? 0) + (row.bonus_credits ?? 0),
-      plan: hasStorePlus ? "plus" : "free",
-      is_unlimited: hasStorePlus,
+      available_credits:
+        isUnlimited ? null : row.available_credits ?? (row.daily_credits ?? 0) + (row.bonus_credits ?? 0),
+      plan: isUnlimited ? "plus" : "free",
+      is_unlimited: isUnlimited,
     };
   };
 
   const readProfileRow = async () => {
-    const endpoint = `${SUPABASE_REST_URL}/profiles?select=id,daily_credits,bonus_credits&id=eq.${encodeURIComponent(userId)}&limit=1`;
+    const endpoint = `${SUPABASE_REST_URL}/profiles?select=id,daily_credits,bonus_credits,plan&id=eq.${encodeURIComponent(userId)}&limit=1`;
     let response: Response;
     try {
       response = await fetch(endpoint, {
@@ -235,7 +236,6 @@ async function getTranscriptionContext(userId: string, accessToken: string): Pro
           .filter((value): value is string => typeof value === "string" && value.trim().length > 0)
           .join(": ") || responseError;
       } catch {
-        // keep raw response text
       }
       throw new Error(`profile_unavailable: HTTP ${response.status}: ${responseError}`);
     }
@@ -252,6 +252,7 @@ async function getTranscriptionContext(userId: string, accessToken: string): Pro
           id: string;
           daily_credits: number | null;
           bonus_credits: number | null;
+          plan: string | null;
         }
       | null;
 
@@ -263,6 +264,7 @@ async function getTranscriptionContext(userId: string, accessToken: string): Pro
       user_id: row.id,
       daily_credits: row.daily_credits,
       bonus_credits: row.bonus_credits,
+      plan: row.plan,
     });
   };
 
@@ -303,7 +305,6 @@ async function getTranscriptionContext(userId: string, accessToken: string): Pro
           .filter((value): value is string => typeof value === "string" && value.trim().length > 0)
           .join(": ") || responseError;
       } catch {
-        // keep raw response text
       }
 
       if (
@@ -329,6 +330,9 @@ async function getTranscriptionContext(userId: string, accessToken: string): Pro
           user_id: string;
           daily_credits: number | null;
           bonus_credits: number | null;
+          available_credits: number | null;
+          plan: string | null;
+          is_unlimited: boolean | null;
         }
       | null;
 
@@ -378,9 +382,7 @@ async function invokeTranscriptionRequest(formData: FormData, accessToken: strin
   const normalizedModel = typeof model === "string" ? model : "";
   const normalizedPrompt = typeof prompt === "string" && prompt.trim() ? prompt.trim() : null;
 
-  const timeoutId = window.setTimeout(() => {
-    // keep parity with the browser path; the Rust command is awaited below
-  }, TRANSCRIPTION_REQUEST_TIMEOUT_MS);
+  const timeoutId = window.setTimeout(() => {}, TRANSCRIPTION_REQUEST_TIMEOUT_MS);
 
   let data: TranscriptionResponse;
   try {
@@ -463,7 +465,6 @@ export async function transcribeAudio(audioBlob: Blob): Promise<string> {
     if (!text) {
       throw new Error("empty_transcription");
     }
-    // Clear prefetch so the next transcription fetches fresh credit state
     cachedPrefetch = null;
     return text;
   } catch (error) {
@@ -484,7 +485,6 @@ export async function transcribeAudio(audioBlob: Blob): Promise<string> {
       if (!retryText) {
         throw new Error("empty_transcription");
       }
-      // Clear prefetch after successful retry as well
       cachedPrefetch = null;
       return retryText;
     }

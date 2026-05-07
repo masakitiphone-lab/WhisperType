@@ -14,7 +14,6 @@ function getLegacyStorageKeys() {
       }
     }
   } catch {
-    // ignore malformed env during local setup
   }
 
   return Array.from(new Set(keys));
@@ -60,7 +59,6 @@ function browserSet(key: string, value: string) {
   try {
     window.localStorage.setItem(key, value);
   } catch {
-    // ignore storage errors in browser fallback
   }
 }
 
@@ -69,7 +67,6 @@ function browserDelete(key: string) {
   try {
     window.localStorage.removeItem(key);
   } catch {
-    // ignore storage errors in browser fallback
   }
 }
 
@@ -121,16 +118,13 @@ export const authStorage = {
 
   async setItem(key: string, value: string): Promise<void> {
     const stored = await secureSet(key, value);
-    browserSet(key, value);
-
     if (!stored) {
+      browserSet(key, value);
       return;
     }
 
     for (const legacyKey of getLegacyStorageKeys()) {
-      if (legacyKey !== key) {
-        browserDelete(legacyKey);
-      }
+      browserDelete(legacyKey);
     }
   },
 
@@ -188,7 +182,6 @@ export async function readStoredAuthSessionSnapshot(): Promise<{ access_token: s
     const parsed = JSON.parse(raw) as StoredAuthSession;
     return extractStoredSessionTokens(parsed);
   } catch {
-    // ignore malformed storage payloads
   }
 
   return null;

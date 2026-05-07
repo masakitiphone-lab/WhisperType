@@ -23,6 +23,7 @@ use hotkeys::{
     request_macos_input_monitoring_permission,
 };
 use tauri_plugin_deep_link::DeepLinkExt;
+use reqwest::Url;
 use text_input::type_text_internal;
 use log_store::append_log_line;
 use audio_processing::{detect_speech_with_vad, process_audio_with_ffmpeg};
@@ -37,11 +38,13 @@ use shared::hotkey_events::{
     emit_transcription_prefetch, emit_transcription_started,
 };
 
-use std::{sync::Mutex, thread, time::Duration};
+use std::{sync::Mutex, thread, time::{Duration, Instant}};
 #[cfg(target_os = "windows")]
 use std::process::Command;
 use ms_store::{check_plus_store_license, get_checkout_provider, is_store_build, purchase_plus_via_store};
 use secure_storage::{secure_storage_delete, secure_storage_get, secure_storage_set};
+
+const TRANSCRIBE_HOST_ALLOWLIST: Option<&str> = option_env!("WHISPERTYPE_TRANSCRIBE_HOST_ALLOWLIST");
 
 #[derive(Clone, serde::Serialize)]
 struct RecordingState {
@@ -56,6 +59,7 @@ struct AppState {
     pending_deep_links: Mutex<Vec<String>>,
     cached_access_token: Mutex<Option<String>>,
     overlay_ready: Mutex<bool>,
+    overlay_last_seen: Mutex<Option<Instant>>,
 }
 
 
@@ -171,6 +175,7 @@ fn register_global_shortcut(app: &AppHandle, shortcut_str: &str) -> Result<Strin
 
 #[tauri::command]
 fn start_recording(app: AppHandle) -> Result<(), String> {
+    ensure_overlay_event_target(&app)?;
     let state = app.state::<AppState>();
     let mut recording = state.recording.lock().map_err(|e| e.to_string())?;
     recording.is_recording = true;
@@ -354,13 +359,73 @@ pub fn ensure_overlay_window(app: &AppHandle, visible: bool) -> Result<(), Strin
     Ok(())
 }
 
+fn mark_overlay_seen(app: &AppHandle) -> Result<(), String> {
+    let state = app.state::<AppState>();
+    *state.overlay_ready.lock().map_err(|e| e.to_string())? = true;
+    *state.overlay_last_seen.lock().map_err(|e| e.to_string())? = Some(Instant::now());
+    Ok(())
+}
+
+fn overlay_seen_recently(app: &AppHandle) -> bool {
+    app.state::<AppState>()
+        .overlay_last_seen
+        .lock()
+        .ok()
+        .and_then(|last_seen| *last_seen)
+        .map(|last_seen| last_seen.elapsed() <= Duration::from_secs(30))
+        .unwrap_or(false)
+}
+
+fn wait_for_overlay_ready(app: &AppHandle, timeout: Duration) -> bool {
+    let started_at = Instant::now();
+    while started_at.elapsed() < timeout {
+        if overlay_seen_recently(app) {
+            return true;
+        }
+        thread::sleep(Duration::from_millis(25));
+    }
+    overlay_seen_recently(app)
+}
+
+pub fn ensure_overlay_event_target(app: &AppHandle) -> Result<(), String> {
+    if app.get_webview_window("overlay").is_some() && overlay_seen_recently(app) {
+        return Ok(());
+    }
+
+    append_log_line("[Overlay] event target stale; recreating overlay window");
+    {
+        let state = app.state::<AppState>();
+        if let Ok(mut overlay_ready) = state.overlay_ready.lock() {
+            *overlay_ready = false;
+        }
+        if let Ok(mut overlay_last_seen) = state.overlay_last_seen.lock() {
+            *overlay_last_seen = None;
+        };
+    }
+
+    if let Some(window) = app.get_webview_window("overlay") {
+        let _ = window.close();
+        thread::sleep(Duration::from_millis(80));
+    }
+
+    ensure_overlay_window(app, false)?;
+    if wait_for_overlay_ready(app, Duration::from_millis(1200)) {
+        Ok(())
+    } else {
+        Err("overlay_not_ready".to_string())
+    }
+}
+
 #[tauri::command]
 fn overlay_ready(app: AppHandle) -> Result<(), String> {
-    let state = app.state::<AppState>();
-    let mut overlay_ready = state.overlay_ready.lock().map_err(|e| e.to_string())?;
-    *overlay_ready = true;
+    mark_overlay_seen(&app)?;
     append_log_line("[Overlay] ready");
     Ok(())
+}
+
+#[tauri::command]
+fn overlay_heartbeat(app: AppHandle) -> Result<(), String> {
+    mark_overlay_seen(&app)
 }
 
 #[tauri::command]
@@ -418,6 +483,34 @@ fn type_text(_app: AppHandle, text: String, use_clipboard_paste: bool) -> Result
     type_text_internal(text, use_clipboard_paste)
 }
 
+fn validate_transcribe_endpoint(endpoint: &str) -> Result<Url, String> {
+    let url = Url::parse(endpoint).map_err(|_| "invalid_transcribe_endpoint".to_string())?;
+    let host = url.host_str().ok_or_else(|| "invalid_transcribe_endpoint".to_string())?;
+    let is_localhost = matches!(host, "localhost" | "127.0.0.1" | "::1");
+
+    if cfg!(debug_assertions) && is_localhost {
+        return Ok(url);
+    }
+
+    if url.scheme() != "https" || is_localhost {
+        return Err("invalid_transcribe_endpoint".to_string());
+    }
+
+    if let Some(allowlist) = TRANSCRIBE_HOST_ALLOWLIST {
+        let allowed = allowlist
+            .split(',')
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .any(|allowed_host| host == allowed_host);
+
+        if !allowed {
+            return Err("transcribe_endpoint_not_allowed".to_string());
+        }
+    }
+
+    Ok(url)
+}
+
 #[tauri::command]
 async fn transcribe_request(
     endpoint: String,
@@ -431,6 +524,7 @@ async fn transcribe_request(
     prompt: Option<String>,
 ) -> Result<String, String> {
     let client = reqwest::Client::new();
+    let endpoint_url = validate_transcribe_endpoint(&endpoint)?;
     let file_size = file_bytes.len();
     let has_language = language
         .as_ref()
@@ -458,7 +552,7 @@ async fn transcribe_request(
     }
 
     let mut request = client
-        .post(&endpoint)
+        .post(endpoint_url)
         .bearer_auth(access_token)
         .multipart(form);
 
@@ -528,7 +622,6 @@ pub fn run() {
                 .collect::<Vec<_>>();
             #[cfg(debug_assertions)]
             println!("[Rust] Single instance triggered. Args: {:?}", redacted_args);
-            // On Windows, args[1] might be the deep link URL if the app was closed
             if args.len() > 1 && args[1].starts_with("whispertype://") {
                 queue_and_emit_deep_links(app, vec![args[1].clone()]);
             }
@@ -544,6 +637,7 @@ pub fn run() {
             pending_deep_links: Mutex::new(Vec::new()),
             cached_access_token: Mutex::new(None),
             overlay_ready: Mutex::new(false),
+            overlay_last_seen: Mutex::new(None),
         })
         .invoke_handler(tauri::generate_handler![
             start_recording,
@@ -560,6 +654,7 @@ pub fn run() {
             request_macos_input_monitoring,
             show_overlay_window,
             overlay_ready,
+            overlay_heartbeat,
             hide_overlay_window,
             resize_overlay_window_command,
             close_overlay_window,
@@ -602,7 +697,6 @@ pub fn run() {
             } else {
                 restore_main_window(app.handle());
             }
-            // Initialize deep link protocol
             let handle = app.handle().clone();
             app.deep_link().on_open_url(move |event| {
                 let urls = event.urls().iter().map(|url| url.to_string()).collect::<Vec<_>>();

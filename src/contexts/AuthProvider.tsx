@@ -6,7 +6,6 @@ import type { Session, User } from "@supabase/supabase-js";
 import { readAppLocale } from "@/lib/appLocale";
 import { authRedirectUrl } from "@/lib/auth";
 import { readStoredAuthSessionSnapshot } from "@/lib/authStorage";
-import { hasLocalPlusLicense } from "@/lib/storeLicense";
 import { supabase } from "@/lib/supabase";
 import { getAuthFlowCopy } from "./authFlowCopy";
 import { AuthContext, type UserProfile } from "./AuthContext";
@@ -180,9 +179,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!user) return;
     const nextProfile = await ensureProfileWithRetry(user);
     const baseProfile = nextProfile ?? buildFallbackProfile(user);
-    const hasStorePlus = await hasLocalPlusLicense(true);
 
-    // Ensure daily credits refresh is reflected by calling get_transcription_context
     try {
       const { data, error } = await supabase.rpc("get_transcription_context");
         const row = (Array.isArray(data) ? data[0] : data) as
@@ -201,8 +198,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           ...baseProfile,
           credits: row.bonus_credits ?? baseProfile.credits,
           dailyCredits: row.daily_credits ?? baseProfile.dailyCredits,
-          availableCredits: hasStorePlus || row.is_unlimited ? null : (row.available_credits ?? baseProfile.availableCredits),
-          plan: hasStorePlus || row.plan === "plus" ? "plus" : baseProfile.plan,
+          availableCredits: row.is_unlimited ? null : (row.available_credits ?? baseProfile.availableCredits),
+          plan: row.plan === "plus" ? "plus" : baseProfile.plan,
         });
         return;
       }
@@ -212,8 +209,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     setProfile({
       ...baseProfile,
-      availableCredits: hasStorePlus ? null : baseProfile.availableCredits,
-      plan: hasStorePlus ? "plus" : baseProfile.plan,
     });
   };
 
@@ -510,6 +505,38 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const deleteAccountData = async () => {
+    try {
+      profileStatusRef.current = "deleting account data";
+      setAuthFlowStatus(null);
+
+      const { error } = await supabase.rpc("delete_own_account_data");
+      if (error) {
+        throw error;
+      }
+
+      await supabase.auth.signOut().catch((error) => {
+        console.warn("Supabase sign-out after account deletion failed:", error);
+      });
+
+      await invoke("set_cached_access_token", { token: null }).catch((error) => {
+        console.warn("Failed to clear cached access token after account deletion:", error);
+      });
+
+      setSession(null);
+      setUser(null);
+      setProfile(null);
+      profileErrorRef.current = null;
+      profileStatusRef.current = "account data deleted";
+      navigate("/login", { replace: true });
+    } catch (e) {
+      console.error("AuthContext: deleteAccountData error:", e);
+      profileStatusRef.current =
+        e instanceof Error ? `delete account data error: ${e.message}` : "delete account data error";
+      throw e;
+    }
+  };
+
   return (
     <AuthContext.Provider
       value={{
@@ -523,6 +550,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         signInWithGoogle,
         signInWithEmailOtp,
         signOut,
+        deleteAccountData,
       }}
     >
       {children}

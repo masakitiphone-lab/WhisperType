@@ -133,14 +133,16 @@ pub fn type_text_internal(text: String, use_clipboard_paste: bool) -> Result<Str
     })?;
 
     if use_clipboard_paste {
+        let mut paste_target_not_selected = false;
+
         #[cfg(target_os = "windows")]
         {
             match detect_windows_paste_target_state() {
                 PasteTargetState::No => {
                     #[cfg(debug_assertions)]
-                    println!("[Rust] Paste target not selected; showing manual copy fallback");
-                    append_log_line("[Rust] Paste target not selected; showing manual copy fallback");
-                    return Err("paste_target_not_selected".to_string());
+                    println!("[Rust] Paste target not selected; continuing with paste and showing manual copy fallback");
+                    append_log_line("[Rust] Paste target not selected; continuing with paste and showing manual copy fallback");
+                    paste_target_not_selected = true;
                 }
                 PasteTargetState::Unknown => {
                     #[cfg(debug_assertions)]
@@ -205,7 +207,11 @@ pub fn type_text_internal(text: String, use_clipboard_paste: bool) -> Result<Str
             });
         }
 
-        return Ok("paste_sent".to_string());
+        return Ok(if paste_target_not_selected {
+            "paste_sent_target_not_selected".to_string()
+        } else {
+            "paste_sent".to_string()
+        });
     }
 
     Ok("typed".to_string())

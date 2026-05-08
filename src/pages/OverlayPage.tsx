@@ -95,6 +95,9 @@ export default function OverlayPage() {
   const waveformOpacity = getWaveformPhaseOpacity(capsulePhase, now - capsulePhaseStartedAt);
   const noticeWidth = overlayNotice?.width ?? 320;
   const noticeHeight = overlayNotice ? getOverlayNoticeContentHeight(overlayNotice) : 112;
+  const resizeOffsetY = overlayNotice
+    ? uiSettingsRef.current.overlayOffsetY - (noticeHeight * overlayScale) / 2
+    : uiSettingsRef.current.overlayOffsetY;
 
   useEffect(() => {
     if (!isOverlayVisible) {
@@ -105,9 +108,9 @@ export default function OverlayPage() {
       height: stageHeight * overlayScale,
       position: uiSettingsRef.current.overlayPosition,
       offsetX: uiSettingsRef.current.overlayOffsetX,
-      offsetY: uiSettingsRef.current.overlayOffsetY,
+      offsetY: resizeOffsetY,
     }).catch((err) => console.error("resize_overlay_window_command failed:", err));
-  }, [isOverlayVisible, overlayScale, stageHeight, stageWidth]);
+  }, [isOverlayVisible, overlayScale, resizeOffsetY, stageHeight, stageWidth]);
 
   return (
     <div
@@ -163,7 +166,7 @@ export default function OverlayPage() {
                     border: "none",
                     boxShadow: "none",
                     padding: "0",
-                    transformOrigin: "center center",
+                    transformOrigin: "center bottom",
                   }}
                 >
                   <OverlayNoticePanel

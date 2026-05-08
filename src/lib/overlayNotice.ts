@@ -60,8 +60,8 @@ export function buildOverlayNotice(locale: AppLocale, payload: OverlayNoticePayl
       openLabel: labels.open,
       closeLabel: labels.close,
       copyLabel: labels.copy,
-      width: 360,
-      minHeight: 268,
+      width: 300,
+      minHeight: 206,
       autoDismiss: false,
     };
   }

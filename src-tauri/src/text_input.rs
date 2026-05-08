@@ -132,14 +132,15 @@ pub fn type_text_internal(text: String, use_clipboard_paste: bool) -> Result<Str
         err
     })?;
 
-        if use_clipboard_paste {
+    if use_clipboard_paste {
         #[cfg(target_os = "windows")]
         {
             match detect_windows_paste_target_state() {
                 PasteTargetState::No => {
                     #[cfg(debug_assertions)]
-                    println!("[Rust] Paste target not selected: continuing because focused element detection is not reliable for webviews");
-                    append_log_line("[Rust] Paste target not selected: continuing because focused element detection is not reliable for webviews");
+                    println!("[Rust] Paste target not selected; showing manual copy fallback");
+                    append_log_line("[Rust] Paste target not selected; showing manual copy fallback");
+                    return Err("paste_target_not_selected".to_string());
                 }
                 PasteTargetState::Unknown => {
                     #[cfg(debug_assertions)]

@@ -66,27 +66,6 @@ export function buildTranscriptionOverlayNotice(errorMessage: string): OverlayNo
     return null;
   }
 
-  if (normalizedError === "empty_transcription") {
-    const overlayError = classifyOverlayError(errorMessage);
-    overlayError.detail =
-      "empty_transcription: 音声は送信されましたが、文字起こし結果が空でした。入力音量、マイク、モデル応答を確認してください。";
-    return overlayError;
-  }
-
-  if (normalizedError === "transcription_timeout") {
-    const overlayError = classifyOverlayError(errorMessage);
-    overlayError.detail =
-      "transcription_timeout: 文字起こし API が 15 秒以内に応答しませんでした。ネットワークまたは API 側の遅延です。";
-    return overlayError;
-  }
-
-  if (normalizedError.includes("invalid_audio")) {
-    const overlayError = classifyOverlayError(errorMessage);
-    overlayError.detail = errorMessage;
-    return overlayError;
-  }
-
   const overlayError = classifyOverlayError(errorMessage);
-  overlayError.detail = errorMessage || `code: ${overlayError.code}`;
   return SHOWABLE_ERROR_CODES.has(overlayError.code) ? overlayError : null;
 }

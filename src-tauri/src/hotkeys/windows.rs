@@ -1,5 +1,5 @@
 use super::{BindingToken, HotkeyBackend, HotkeyBackendInfo, HotkeyBinding};
-use crate::{restore_main_window, shared::log::append_log_line, AppState};
+use crate::shared::log::append_log_line;
 use std::{
     collections::HashSet,
     sync::{
@@ -8,7 +8,7 @@ use std::{
     },
     thread,
 };
-use tauri::{AppHandle, Emitter, Manager};
+use tauri::AppHandle;
 use windows::Win32::{
     Foundation::{HMODULE, HWND, LPARAM, LRESULT, WPARAM},
     System::LibraryLoader::GetModuleHandleW,
@@ -166,30 +166,11 @@ fn handle_binding_state(state: &Arc<HookSharedState>) {
 
 fn start_overlay_session(state: &Arc<HookSharedState>, required_group_count: usize) {
     if let Some(app_handle) = state.app_handle.lock().unwrap().clone() {
-        if let Ok(app_state) = app_handle.state::<AppState>().cached_access_token.lock() {
-            if app_state.is_none() {
-                append_log_line("[Shortcut] rejected: no cached access token (user not signed in)");
-                restore_main_window(&app_handle);
-                app_handle.emit("auth-required", ()).ok();
-                return;
-            }
-        }
-
         let _ = required_group_count;
-        let overlay_ready = app_handle
-            .state::<AppState>()
-            .overlay_ready
-            .lock()
-            .map(|ready| *ready)
-            .unwrap_or(false);
-        append_log_line(&format!("[Shortcut] recording start overlay_ready={overlay_ready}"));
-
-        if let Err(error) = crate::overlay_window::ensure_overlay_event_target(&app_handle) {
-            append_log_line(&format!("[Overlay] failed to prepare event target: {error}"));
-            return;
+        if let Err(error) = crate::start_recording_internal(&app_handle, "windows-hook") {
+            append_log_line(&format!("[Shortcut] start failed: {error}"));
+            state.active.store(false, Ordering::SeqCst);
         }
-
-        app_handle.emit("recording-started", ()).ok();
     }
 }
 
@@ -197,7 +178,9 @@ fn stop_overlay_session(state: &Arc<HookSharedState>, _reason: &str) {
     if let Some(app_handle) = state.app_handle.lock().unwrap().clone() {
         let was_active = state.active.swap(false, Ordering::SeqCst);
         if was_active {
-            app_handle.emit("recording-stopped", ()).ok();
+            if let Err(error) = crate::stop_recording_internal(&app_handle, "windows-hook") {
+                append_log_line(&format!("[Shortcut] stop failed: {error}"));
+            }
         }
     }
 }

@@ -171,23 +171,60 @@ fn register_global_shortcut(app: &AppHandle, shortcut_str: &str) -> Result<Strin
 
 #[tauri::command]
 fn start_recording(app: AppHandle) -> Result<(), String> {
-    overlay_window::ensure_overlay_event_target(&app)?;
-    let state = app.state::<AppState>();
-    let mut recording = state.recording.lock().map_err(|e| e.to_string())?;
-    recording.is_recording = true;
-    recording.is_transcribing = false;
-    emit_recording_started(&app);
-    emit_transcription_prefetch(&app);
+    start_recording_internal(&app, "command")?;
     Ok(())
 }
 
 #[tauri::command]
 fn stop_recording(app: AppHandle) -> Result<(), String> {
+    stop_recording_internal(&app, "command")?;
+    Ok(())
+}
+
+pub(crate) fn start_recording_internal(app: &AppHandle, source: &str) -> Result<bool, String> {
+    if let Ok(cached_access_token) = app.state::<AppState>().cached_access_token.lock() {
+        if cached_access_token.is_none() {
+            append_log_line("[Shortcut] rejected: no cached access token (user not signed in)");
+            restore_main_window(app);
+            app.emit("auth-required", ()).ok();
+            return Err("auth_required".to_string());
+        }
+    }
+
     let state = app.state::<AppState>();
     let mut recording = state.recording.lock().map_err(|e| e.to_string())?;
+    if recording.is_recording {
+        append_log_line(&format!("[Shortcut] start ignored: already recording source={source}"));
+        return Ok(false);
+    }
+    recording.is_recording = true;
+    recording.is_transcribing = false;
+    drop(recording);
+
+    if let Err(error) = overlay_window::ensure_overlay_event_target(app) {
+        let mut recording = state.recording.lock().map_err(|e| e.to_string())?;
+        recording.is_recording = false;
+        recording.is_transcribing = false;
+        return Err(error);
+    }
+
+    emit_recording_started(app);
+    emit_transcription_prefetch(app);
+    Ok(true)
+}
+
+pub(crate) fn stop_recording_internal(app: &AppHandle, source: &str) -> Result<bool, String> {
+    let state = app.state::<AppState>();
+    let mut recording = state.recording.lock().map_err(|e| e.to_string())?;
+    if !recording.is_recording {
+        append_log_line(&format!("[Shortcut] stop ignored: not recording source={source}"));
+        return Ok(false);
+    }
     recording.is_recording = false;
-    emit_recording_stopped(&app);
-    Ok(())
+    drop(recording);
+
+    emit_recording_stopped(app);
+    Ok(true)
 }
 
 #[tauri::command]

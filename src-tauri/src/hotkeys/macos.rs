@@ -559,20 +559,9 @@ fn emit_native_binding_transition() {
             .clone()
             .unwrap_or_else(|| "unknown".to_string());
         crate::shared::log::append_log_line(&format!("[Shortcut] matched: {binding_label}"));
-        if let Ok(app_state) = app_handle.state::<crate::AppState>().cached_access_token.lock() {
-            if app_state.is_none() {
-                crate::shared::log::append_log_line("[Shortcut] rejected: no cached access token (user not signed in)");
-                crate::restore_main_window(&app_handle);
-                app_handle.emit("auth-required", ()).ok();
-                return;
-            }
+        if let Err(error) = crate::start_recording_internal(&app_handle, "macos-native") {
+            crate::shared::log::append_log_line(&format!("[Shortcut] start failed: {error}"));
         }
-        if let Err(error) = crate::overlay_window::ensure_overlay_event_target(&app_handle) {
-            crate::shared::log::append_log_line(&format!("[Overlay] failed to prepare event target: {error}"));
-            return;
-        }
-
-        app_handle.emit("recording-started", ()).ok();
     } else {
         let binding_label = state
             .binding_label
@@ -581,7 +570,9 @@ fn emit_native_binding_transition() {
             .clone()
             .unwrap_or_else(|| "unknown".to_string());
         crate::shared::log::append_log_line(&format!("[Shortcut] released: {binding_label}"));
-        app_handle.emit("recording-stopped", ()).ok();
+        if let Err(error) = crate::stop_recording_internal(&app_handle, "macos-native") {
+            crate::shared::log::append_log_line(&format!("[Shortcut] stop failed: {error}"));
+        }
     }
 }
 

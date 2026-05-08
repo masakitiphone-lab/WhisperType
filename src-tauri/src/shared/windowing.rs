@@ -1,12 +1,27 @@
 use tauri::{webview::Color, WebviewWindow};
 
-pub const OVERLAY_WIDTH: u32 = 520;
-pub const OVERLAY_HEIGHT: u32 = 196;
-pub const OVERLAY_BOTTOM_OFFSET: f64 = 38.0;
+pub const OVERLAY_WIDTH: u32 = 211;
+pub const OVERLAY_HEIGHT: u32 = 56;
+pub const OVERLAY_VERTICAL_OFFSET: f64 = 0.0;
 pub const SETTINGS_WINDOW_WIDTH: u32 = 1040;
 pub const SETTINGS_WINDOW_HEIGHT: u32 = 780;
 pub const SETTINGS_WINDOW_MIN_WIDTH: u32 = 900;
 pub const SETTINGS_WINDOW_MIN_HEIGHT: u32 = 680;
+
+#[derive(Clone, Copy)]
+pub enum OverlayPosition {
+    Bottom,
+    Top,
+}
+
+impl OverlayPosition {
+    pub fn from_str(value: &str) -> Self {
+        match value {
+            "top" => Self::Top,
+            _ => Self::Bottom,
+        }
+    }
+}
 
 pub fn apply_overlay_visuals(window: &WebviewWindow) {
     let _ = window.set_shadow(false);
@@ -20,29 +35,42 @@ pub fn show_window_without_focus(window: &WebviewWindow) {
     let _ = window.set_always_on_top(true);
 }
 
-pub fn position_window_bottom_center(
+pub fn position_overlay_window(
     window: &WebviewWindow,
     width: f64,
     height: f64,
-    bottom_offset: f64,
+    vertical_offset: f64,
+    offset_x: f64,
+    overlay_position: OverlayPosition,
 ) {
     let monitor = window
-        .current_monitor()
+        .primary_monitor()
         .ok()
         .flatten()
-        .or_else(|| window.primary_monitor().ok().flatten());
+        .or_else(|| window.current_monitor().ok().flatten());
 
     if let Some(monitor) = monitor {
         let scale = monitor.scale_factor();
         let size = monitor.size().to_logical::<f64>(scale);
         let position = monitor.position().to_logical::<f64>(scale);
-        let x = position.x + (size.width - width) / 2.0;
-        let y = position.y + size.height - height - bottom_offset;
+        let x = position.x + (size.width - width) / 2.0 + offset_x;
+        let anchor_y = match overlay_position {
+            OverlayPosition::Top => size.height * 0.18,
+            OverlayPosition::Bottom => size.height * 0.82,
+        };
+        let y = position.y + anchor_y - (height / 2.0) + vertical_offset;
         let _ = window.set_position(tauri::Position::Logical(tauri::LogicalPosition { x, y }));
     }
 }
 
-pub fn resize_overlay_window(window: &WebviewWindow, width: f64, height: f64) {
+pub fn resize_overlay_window(
+    window: &WebviewWindow,
+    width: f64,
+    height: f64,
+    overlay_position: OverlayPosition,
+    offset_x: f64,
+    offset_y: f64,
+) {
     let logical_width = width.max(1.0).round();
     let logical_height = height.max(1.0).round();
     apply_overlay_visuals(window);
@@ -50,11 +78,13 @@ pub fn resize_overlay_window(window: &WebviewWindow, width: f64, height: f64) {
         width: logical_width,
         height: logical_height,
     }));
-    position_window_bottom_center(
+    position_overlay_window(
         window,
         logical_width,
         logical_height,
-        OVERLAY_BOTTOM_OFFSET,
+        offset_y,
+        offset_x,
+        overlay_position,
     );
 }
 

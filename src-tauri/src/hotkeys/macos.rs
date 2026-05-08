@@ -567,7 +567,7 @@ fn emit_native_binding_transition() {
                 return;
             }
         }
-        if let Err(error) = crate::ensure_overlay_event_target(&app_handle) {
+        if let Err(error) = crate::overlay_window::ensure_overlay_event_target(&app_handle) {
             crate::shared::log::append_log_line(&format!("[Overlay] failed to prepare event target: {error}"));
             return;
         }

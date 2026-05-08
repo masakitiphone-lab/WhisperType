@@ -8,11 +8,14 @@ import {
   requestPreferredAudioStream,
 } from "@/lib/audioCapture";
 import { readAppLocale, type AppLocale } from "@/lib/appLocale";
-import { readAppSettings } from "@/lib/appSettings";
-import { buildOverlayNotice, classifyOverlayError, type OverlayNoticePayload, type OverlayNoticeViewModel } from "@/lib/overlayNotice";
+import { readAppSettings, writeAppSettings } from "@/lib/appSettings";
+import { buildOverlayNotice, type OverlayNoticePayload, type OverlayNoticeViewModel } from "@/lib/overlayNotice";
 import { prefetchTranscriptionReadiness, transcribeAudio } from "@/services/transcription";
 import { useRecordingSounds } from "@/hooks/useRecordingSounds";
-import { createDisplayWaveformLevels, createEmptyWaveformLevels, RECORDING_SPEECH_RAW_THRESHOLD, RECORDING_SPEECH_THRESHOLD, WAVEFORM_GAIN, WAVEFORM_SMOOTHING, type ActiveRecording, type CapsulePhase, type CapturePhase } from "@/hooks/overlayRecordingWaveform";
+import { createEmptyWaveformLevels, startRecordingWaveformAnimation, type ActiveRecording, type CapsulePhase, type CapturePhase } from "@/hooks/overlayRecordingWaveform";
+import { assertRecordingHasSpeech, buildTranscriptionOverlayNotice, stopRecordingAndCreateBlob } from "@/hooks/overlayRecordingTranscription";
+import { attachOverlayRecordingEventListeners } from "@/hooks/overlayRecordingEvents";
+import { flushPastedTranscriptions, queueTranscriptionPaste } from "@/hooks/overlayRecordingPasteQueue";
 import {
   CAPSULE_COLLAPSE_DURATION,
   CAPSULE_EXPAND_DURATION,
@@ -22,12 +25,7 @@ import {
   getOverlayNoticeStageHeight,
   getOverlayNoticeStageWidth,
 } from "@/lib/overlayLayout";
-
-type VadDetectionResult = {
-  has_speech: boolean;
-  total_frames: number;
-  speech_frames: number;
-};
+import { readOverlayLayoutPreferences, resizeOverlayWindowForPreferences, type OverlayLayoutPreferences } from "@/lib/overlayLayoutPreferences";
 
 export function useOverlayRecordingController() {
   const [recordingState, setState] = useState<"idle" | "recording" | "transcribing" | "finished">("idle");
@@ -42,6 +40,9 @@ export function useOverlayRecordingController() {
   const [waveformLevels, setWaveformLevels] = useState<number[]>(() => createEmptyWaveformLevels());
   const [overlayScale, setOverlayScale] = useState(readAppSettings().overlayScale);
   const waveformAnimationRef = useRef<number | null>(null);
+  const isOverlayVisibleRef = useRef(false);
+  const stageWidthRef = useRef(getOverlayCapsuleStageWidth());
+  const stageHeightRef = useRef(getOverlayCapsuleStageHeight());
   const waveformTimeRef = useRef(0);
   const speechLevelRef = useRef(0);
   const audioContextRef = useRef<AudioContext | null>(null);
@@ -61,11 +62,15 @@ export function useOverlayRecordingController() {
   const finishTimeoutRef = useRef<number | null>(null);
   const spinnerHideTimeoutRef = useRef<number | null>(null);
   const noticeDismissTimeoutRef = useRef<number | null>(null);
+  const overlayGenerationRef = useRef(0);
+  const pendingStopWhileStartingRef = useRef(false);
   const { startSoundRef, stopSoundRef } = useRecordingSounds();
   const uiSettingsRef = useRef(readAppSettings());
   const appLocaleRef = useRef<AppLocale>(readAppLocale());
   const shouldReduceMotion = !!useReducedMotion();
   overlayNoticeRef.current = overlayNotice;
+  isOverlayVisibleRef.current = isOverlayVisible;
+  const overlayGenerationIsCurrent = (generation: number) => generation === overlayGenerationRef.current;
   const updateState = (nextState: typeof recordingState) => {
     stateRef.current = nextState;
     setState(nextState);
@@ -84,7 +89,11 @@ export function useOverlayRecordingController() {
       return;
     }
     setIsOverlayVisible(false);
+    const hideGeneration = overlayGenerationRef.current;
     noticeDismissTimeoutRef.current = window.setTimeout(async () => {
+      if (!overlayGenerationIsCurrent(hideGeneration)) {
+        return;
+      }
       setOverlayNotice(null);
       await invoke("hide_overlay_window");
       noticeDismissTimeoutRef.current = null;
@@ -126,14 +135,10 @@ export function useOverlayRecordingController() {
     setOverlayLayoutMode("spinner");
     updateState("transcribing");
   };
-  const stageWidth =
-    overlayNotice
-      ? getOverlayNoticeStageWidth(overlayNotice.width)
-      : getOverlayCapsuleStageWidth();
-  const stageHeight =
-    overlayNotice
-      ? getOverlayNoticeStageHeight(getOverlayNoticeContentHeight(overlayNotice))
-      : getOverlayCapsuleStageHeight();
+  const stageWidth = overlayNotice ? getOverlayNoticeStageWidth(overlayNotice.width) : getOverlayCapsuleStageWidth();
+  const stageHeight = overlayNotice ? getOverlayNoticeStageHeight(getOverlayNoticeContentHeight(overlayNotice)) : getOverlayCapsuleStageHeight();
+  stageWidthRef.current = stageWidth;
+  stageHeightRef.current = stageHeight;
   useEffect(() => {
     const syncSettings = () => {
       uiSettingsRef.current = readAppSettings();
@@ -148,7 +153,37 @@ export function useOverlayRecordingController() {
       window.removeEventListener("focus", syncSettings);
     };
   }, [setOverlayScale]);
-
+  useEffect(() => {
+    let unlistenOverlaySettingsChanged: (() => void) | undefined;
+    let isListenerSetupCancelled = false;
+    void (async () => {
+      const overlaySettingsChangedListener = await listen<OverlayLayoutPreferences>("overlay-settings-changed", async (event) => {
+        writeAppSettings(event.payload);
+        uiSettingsRef.current = {
+          ...readAppSettings(),
+          ...event.payload,
+        };
+        setOverlayScale(uiSettingsRef.current.overlayScale);
+        if (!isOverlayVisibleRef.current) {
+          return;
+        }
+        await resizeOverlayWindowForPreferences(
+          stageWidthRef.current,
+          stageHeightRef.current,
+          uiSettingsRef.current,
+        ).catch((err) => console.error("resize_overlay_window_command failed:", err));
+      });
+      if (isListenerSetupCancelled) {
+        overlaySettingsChangedListener();
+        return;
+      }
+      unlistenOverlaySettingsChanged = overlaySettingsChangedListener;
+    })();
+    return () => {
+      isListenerSetupCancelled = true;
+      unlistenOverlaySettingsChanged?.();
+    };
+  }, [setOverlayScale]);
   const cleanupAudioResources = async (
     stream: MediaStream | null = mediaStreamRef.current,
     audioContext: AudioContext | null = audioContextRef.current,
@@ -174,18 +209,17 @@ export function useOverlayRecordingController() {
       setWaveformLevels(createEmptyWaveformLevels());
     }
   };
-
   const isOverlayJobActive = () =>
     isStartingRef.current ||
     capturePhaseRef.current !== "idle" ||
     currentRecordingRef.current !== null ||
     pendingTranscriptionsRef.current > 0 ||
     stateRef.current === "recording";
-
   useEffect(() => {
     const scheduleOverlayHideIfIdle = () => {
       if (finishTimeoutRef.current) window.clearTimeout(finishTimeoutRef.current);
       if (spinnerHideTimeoutRef.current) window.clearTimeout(spinnerHideTimeoutRef.current);
+      const hideGeneration = overlayGenerationRef.current;
       if (overlayNoticeRef.current && !overlayNoticeRef.current.autoDismiss) {
         return;
       }
@@ -193,12 +227,12 @@ export function useOverlayRecordingController() {
         return;
       }
       finishTimeoutRef.current = window.setTimeout(() => {
-        if (isOverlayJobActive()) {
+        if (!overlayGenerationIsCurrent(hideGeneration) || isOverlayJobActive()) {
           return;
         }
         updateState("idle");
         spinnerHideTimeoutRef.current = window.setTimeout(async () => {
-          if (isOverlayJobActive()) {
+          if (!overlayGenerationIsCurrent(hideGeneration) || isOverlayJobActive()) {
             return;
           }
           setIsOverlayVisible(false);
@@ -209,44 +243,30 @@ export function useOverlayRecordingController() {
         }, shouldReduceMotion ? 220 : CAPSULE_COLLAPSE_DURATION * 1000 + 160);
       }, shouldReduceMotion ? 180 : CAPSULE_COLLAPSE_DURATION * 1000);
     };
-
-    const flushPastedTranscriptions = async () => {
-      const combinedText = pendingPasteTextRef.current.trim();
-      if (!combinedText) {
+    const showOverlayWindowForCurrentSettings = async (generation: number) => {
+      const overlayLayoutPreferences = await readOverlayLayoutPreferences();
+      uiSettingsRef.current = {
+        ...readAppSettings(),
+        ...overlayLayoutPreferences,
+      };
+      if (!uiSettingsRef.current.showOverlay || !overlayGenerationIsCurrent(generation)) {
         return;
       }
-      try {
-        await invoke<string>("type_text", { text: `${combinedText} `, useClipboardPaste: true });
-      } catch (error) {
-        await invoke("log_to_terminal", {
-          msg: `[Paste Flush Error] ${error}`,
-        }).catch((err) => console.error("log_to_terminal failed:", err));
-        throw error;
-      } finally {
-        pendingPasteTextRef.current = "";
-      }
-    };
-
-    const MAX_PENDING_PASTE_LENGTH = 5000;
-
-    const queueTranscriptionPaste = (text: string) => {
-      const normalizedText = text.trim();
-      if (!normalizedText) {
+      await resizeOverlayWindowForPreferences(
+        stageWidth,
+        stageHeight,
+        uiSettingsRef.current,
+      ).catch((err) => console.error("resize_overlay_window_command failed:", err));
+      if (!overlayGenerationIsCurrent(generation)) {
         return;
       }
-      const nextText = pendingPasteTextRef.current
-        ? `${pendingPasteTextRef.current} ${normalizedText}`
-        : normalizedText;
-      pendingPasteTextRef.current =
-        nextText.length > MAX_PENDING_PASTE_LENGTH
-          ? nextText.slice(-MAX_PENDING_PASTE_LENGTH)
-          : nextText;
+      await invoke("show_overlay_window").catch((err) => console.error("show_overlay_window failed:", err));
     };
-
     const processTranscriptionJob = async (recording: ActiveRecording) => {
       if (processedRecordingIdsRef.current.has(recording.id)) {
         return;
       }
+      const jobOverlayGeneration = overlayGenerationRef.current;
       processedRecordingIdsRef.current.add(recording.id);
       let keepOverlayVisible = false;
       capturePhaseRef.current = "transcribing";
@@ -256,39 +276,13 @@ export function useOverlayRecordingController() {
       const activeStream = recording.stream;
       const activeAudioContext = recording.audioContext;
       const activeWaveformAnimation = recording.waveformAnimation;
-      let recordedBlob: Blob | null = null;
-      if (recording.mediaRecorder.state !== "inactive") {
-        recordedBlob = await new Promise<Blob>((resolve, reject) => {
-          recording.mediaRecorder.onstop = () => {
-            resolve(new Blob(recording.chunks, { type: recording.mimeType || recording.mediaRecorder.mimeType || "audio/webm" }));
-          };
-          recording.mediaRecorder.onerror = (event) => reject((event as ErrorEvent).error ?? new Error("MediaRecorder failed"));
-          recording.mediaRecorder.stop();
-        });
-      }
+      const recordedBlob = await stopRecordingAndCreateBlob(recording);
       await cleanupAudioResources(activeStream, activeAudioContext, activeWaveformAnimation, false);
       try {
-        if (!recordedBlob || recordedBlob.size === 0 || !recording.hadSpeech) {
-          await invoke("log_to_terminal", {
-            msg: `[Transcription] skipped silent_audio hadSpeech=${recording.hadSpeech} bytes=${recordedBlob?.size ?? 0}`,
-          }).catch((err) => console.error("log_to_terminal failed:", err));
-          throw new Error("silent_audio");
-        }
-        const vadResult = await invoke<VadDetectionResult>("detect_speech_with_vad", {
-          bytes: Array.from(new Uint8Array(await recordedBlob.arrayBuffer())),
-        });
-        if (!vadResult.has_speech) {
-          await invoke("log_to_terminal", {
-            msg: `[Transcription] skipped vad_rejected frames=${vadResult.speech_frames}/${vadResult.total_frames} bytes=${recordedBlob.size}`,
-          }).catch((err) => console.error("log_to_terminal failed:", err));
-          throw new Error("silent_audio");
-        }
-        await invoke("log_to_terminal", {
-          msg: `[Transcription] API request vad=${vadResult.speech_frames}/${vadResult.total_frames} bytes=${recordedBlob.size}`,
-        }).catch((err) => console.error("log_to_terminal failed:", err));
+        const transcribableBlob = await assertRecordingHasSpeech(recordedBlob, recording.hadSpeech);
         await invoke("start_transcription");
-        const text = await transcribeAudio(recordedBlob);
-        queueTranscriptionPaste(text);
+        const text = await transcribeAudio(transcribableBlob);
+        queueTranscriptionPaste(pendingPasteTextRef, text);
         void prefetchTranscriptionReadiness().catch((err) => {
           console.warn("Post-transcription prefetch failed:", err);
         });
@@ -299,48 +293,12 @@ export function useOverlayRecordingController() {
           errorName: error instanceof Error ? error.name : typeof error,
           rawError: error,
         });
-        if (errorMessage.toLowerCase() === "silent_audio") {
-          return;
-        }
-        if (errorMessage.toLowerCase() === "empty_transcription") {
-          const overlayError = classifyOverlayError(errorMessage);
-          overlayError.detail = "empty_transcription: 音声は送信されましたが、文字起こし結果が空でした。入力音量・マイク・モデル応答を確認してください。";
-          keepOverlayVisible = true;
-          await showOverlayNotice(overlayError);
-          return;
-        }
-        if (errorMessage.toLowerCase() === "transcription_timeout") {
-          const overlayError = classifyOverlayError(errorMessage);
-          overlayError.detail = "transcription_timeout: 文字起こしAPIが15秒以内に応答しませんでした。ネットワークまたはAPI側の遅延です。";
-          keepOverlayVisible = true;
-          await showOverlayNotice(overlayError);
-          return;
-        }
-        if (errorMessage.toLowerCase().includes("invalid_audio")) {
-          const overlayError = classifyOverlayError(errorMessage);
-          overlayError.detail = errorMessage;
-          keepOverlayVisible = true;
-          await showOverlayNotice(overlayError);
-          return;
-        }
-        const overlayError = classifyOverlayError(errorMessage);
-        overlayError.detail = errorMessage || `code: ${overlayError.code}`;
-        const showableErrorCodes = new Set([
-          "transcription_failed",
-          "transcription_timeout",
-          "empty_transcription",
-          "invalid_audio",
-          "auth_required",
-          "insufficient_credits",
-          "ctrl_v_send_failed",
-          "profile_unavailable",
-          "provider_unavailable",
-          "history_store_failed",
-        ]);
-        if (showableErrorCodes.has(overlayError.code)) {
+        const overlayError = buildTranscriptionOverlayNotice(errorMessage);
+        if (overlayError) {
           keepOverlayVisible = true;
           await showOverlayNotice(overlayError);
         }
+        return;
         return;
       } finally {
         pendingTranscriptionsRef.current = Math.max(0, pendingTranscriptionsRef.current - 1);
@@ -355,7 +313,7 @@ export function useOverlayRecordingController() {
         capturePhaseRef.current = "idle";
       }
       if (!currentRecordingRef.current && !isStartingRef.current && pendingTranscriptionsRef.current === 0 && pendingPasteTextRef.current.trim()) {
-        await flushPastedTranscriptions().then(() => {
+        await flushPastedTranscriptions(pendingPasteTextRef).then(() => {
           uiSettingsRef.current = readAppSettings();
           if (stopSoundRef.current) stopSoundRef.current.volume = uiSettingsRef.current.soundVolume;
           if (uiSettingsRef.current.playStopSound) void stopSoundRef.current?.play().catch((err) => console.error("Success sound play failed:", err));
@@ -363,7 +321,13 @@ export function useOverlayRecordingController() {
           console.error("Failed to flush pending transcription text:", error);
         });
       }
-      if (!keepOverlayVisible && !currentRecordingRef.current && !isStartingRef.current && pendingTranscriptionsRef.current === 0) {
+      if (
+        overlayGenerationIsCurrent(jobOverlayGeneration) &&
+        !keepOverlayVisible &&
+        !currentRecordingRef.current &&
+        !isStartingRef.current &&
+        pendingTranscriptionsRef.current === 0
+      ) {
         updateState("idle");
         updateCapsulePhase("idle");
         setCapsuleMounted(false);
@@ -377,13 +341,23 @@ export function useOverlayRecordingController() {
       }
     };
     const startRealRecording = async () => {
-      if (isStartingRef.current || currentRecordingRef.current || recordingSessionActiveRef.current) return;
+      if (isStartingRef.current || currentRecordingRef.current || recordingSessionActiveRef.current) {
+        const activeGeneration = overlayGenerationRef.current;
+        setIsOverlayVisible(readAppSettings().showOverlay);
+        await showOverlayWindowForCurrentSettings(activeGeneration);
+        return;
+      }
+      const recordingGeneration = overlayGenerationRef.current + 1;
+      overlayGenerationRef.current = recordingGeneration;
+      pendingStopWhileStartingRef.current = false;
       isStartingRef.current = true;
       capturePhaseRef.current = "arming";
       uiSettingsRef.current = readAppSettings();
       if (finishTimeoutRef.current) window.clearTimeout(finishTimeoutRef.current);
       if (spinnerHideTimeoutRef.current) window.clearTimeout(spinnerHideTimeoutRef.current);
       if (noticeDismissTimeoutRef.current) window.clearTimeout(noticeDismissTimeoutRef.current);
+      finishTimeoutRef.current = null;
+      spinnerHideTimeoutRef.current = null;
       noticeDismissTimeoutRef.current = null;
       setOverlayNotice(null);
       setOverlayLayoutMode("capsule");
@@ -392,9 +366,7 @@ export function useOverlayRecordingController() {
       updateCapsulePhase("expanding");
       updateState("recording");
       setIsOverlayVisible(uiSettingsRef.current.showOverlay);
-      if (uiSettingsRef.current.showOverlay) {
-        await invoke("show_overlay_window").catch((err) => console.error("show_overlay_window failed:", err));
-      }
+      await showOverlayWindowForCurrentSettings(recordingGeneration);
       if (uiSettingsRef.current.playStartSound) {
         void startSoundRef.current?.play().catch((err) => console.error("Start sound play failed:", err));
       }
@@ -403,15 +375,6 @@ export function useOverlayRecordingController() {
           updateCapsulePhase("settled");
         }
       }, shouldReduceMotion ? 80 : CAPSULE_EXPAND_DURATION * 1000);
-      await invoke("resize_overlay_window_command", {
-        width: stageWidth * uiSettingsRef.current.overlayScale,
-        height: stageHeight * uiSettingsRef.current.overlayScale,
-      });
-      if (uiSettingsRef.current.showOverlay) {
-        window.requestAnimationFrame(() => {
-          void invoke("show_overlay_window").catch((err) => console.error("show_overlay_window retry failed:", err));
-        });
-      }
       try {
         const preferredAudioInputDeviceId = uiSettingsRef.current.preferredAudioInputDeviceId.trim();
         const stream = await requestPreferredAudioStream(preferredAudioInputDeviceId || undefined);
@@ -456,35 +419,26 @@ export function useOverlayRecordingController() {
           if (event.data && event.data.size > 0) activeRecording.chunks.push(event.data);
         };
         mediaRecorder.start();
-        const updateWaveform = () => {
-          if (stateRef.current === "recording" && currentRecordingRef.current?.id === recordingId) {
-            analyser.getFloatTimeDomainData(dataArray);
-            waveformTimeRef.current += 1;
-            let sumSquares = 0;
-            let peak = 0;
-            for (const sample of dataArray) {
-              const absolute = Math.abs(sample ?? 0);
-              sumSquares += (sample ?? 0) * (sample ?? 0);
-              if (absolute > peak) peak = absolute;
-            }
-            const rms = Math.sqrt(sumSquares / dataArray.length);
-            const activityLevel = rms * 0.72 + peak * 0.28;
-            const rawLevel = activityLevel * WAVEFORM_GAIN;
-            speechLevelRef.current = speechLevelRef.current * (1 - WAVEFORM_SMOOTHING) + Math.max(0, Math.min(1, rawLevel)) * WAVEFORM_SMOOTHING;
-            const hasSpeech = speechLevelRef.current > RECORDING_SPEECH_THRESHOLD || rawLevel > RECORDING_SPEECH_RAW_THRESHOLD;
-            if (hasSpeech) {
-              activeRecording.hadSpeech = true;
-              activeRecording.lastSpeechAtMs = Date.now();
-            }
-            setWaveformLevels(createDisplayWaveformLevels(waveformTimeRef.current, speechLevelRef.current));
-            activeRecording.waveformAnimation = requestAnimationFrame(updateWaveform);
-            waveformAnimationRef.current = activeRecording.waveformAnimation;
-          }
-        };
-        updateWaveform();
+        if (pendingStopWhileStartingRef.current) {
+          pendingStopWhileStartingRef.current = false;
+          recordingSessionActiveRef.current = false;
+          currentRecordingRef.current = null;
+          beginTranscriptionTransition();
+          void processTranscriptionJob(activeRecording);
+          return;
+        }
+        startRecordingWaveformAnimation(activeRecording, {
+          currentRecordingRef,
+          speechLevelRef,
+          stateRef,
+          waveformAnimationRef,
+          waveformTimeRef,
+          setWaveformLevels,
+        });
       } catch (error) {
         console.error("Microphone start failed:", error);
         capturePhaseRef.current = "idle";
+        pendingStopWhileStartingRef.current = false;
         await cleanupAudioResources();
         await invoke("finish_transcription").catch((err) => console.error("finish_transcription failed:", err));
         isStartingRef.current = false;
@@ -496,45 +450,23 @@ export function useOverlayRecordingController() {
         isStartingRef.current = false;
       }
     };
-    let unlistenRecordingStarted: (() => void) | undefined;
-    let unlistenRecordingStopped: (() => void) | undefined;
-    let unlistenTranscriptionPrefetch: (() => void) | undefined;
-    void (async () => {
-      unlistenRecordingStarted = await listen("recording-started", () => {
-        void startRealRecording();
-      });
-      unlistenTranscriptionPrefetch = await listen("transcription-prefetch", () => {
-        void prefetchTranscriptionReadiness().catch((error) => {
-          console.warn("Failed to prefetch transcription readiness:", error);
-        });
-      });
-      unlistenRecordingStopped = await listen("recording-stopped", () => {
-        if (!currentRecordingRef.current) {
-          return;
-        }
-        const finishedRecording = currentRecordingRef.current;
-        recordingSessionActiveRef.current = false;
-        currentRecordingRef.current = null;
-        beginTranscriptionTransition();
-        void processTranscriptionJob(finishedRecording);
-      });
-      await invoke("overlay_ready").catch((error) => {
-        console.error("overlay_ready failed:", error);
-      });
-    })();
-    return () => {
-      unlistenRecordingStarted?.();
-      unlistenTranscriptionPrefetch?.();
-      unlistenRecordingStopped?.();
-      if (currentRecordingRef.current) {
-        currentRecordingRef.current = { ...currentRecordingRef.current, lastSpeechAtMs: null };
-      }
-      processedRecordingIdsRef.current.clear();
-      recordingSessionActiveRef.current = false;
-      void cleanupAudioResources();
-    };
+    return attachOverlayRecordingEventListeners(
+      {
+        beginTranscriptionTransition,
+        cleanupAudioResources: () => cleanupAudioResources(),
+        processTranscriptionJob,
+        startRealRecording,
+      },
+      {
+        capturePhaseRef,
+        currentRecordingRef,
+        isStartingRef,
+        pendingStopWhileStartingRef,
+        processedRecordingIdsRef,
+        recordingSessionActiveRef,
+      },
+    );
   }, []);
-
   return {
     recordingState,
     capsulePhaseStartedAt,

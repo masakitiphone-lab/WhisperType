@@ -14,6 +14,9 @@
   model: "whisper-large-v3" | "whisper-large-v3-turbo";
   prompt: string;
   overlayScale: number;
+  overlayPosition: "bottom" | "top";
+  overlayOffsetX: number;
+  overlayOffsetY: number;
   appLocale: "en" | "ja" | "es";
   showOverlay: boolean;
   showWaveform: boolean;
@@ -35,6 +38,9 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   model: "whisper-large-v3-turbo",
   prompt: "",
   overlayScale: 1,
+  overlayPosition: "bottom",
+  overlayOffsetX: 0,
+  overlayOffsetY: 80,
   appLocale: "ja",
   showOverlay: true,
   showWaveform: true,
@@ -92,6 +98,18 @@ export function readAppSettings(): AppSettings {
         typeof parsed.overlayScale === "number" && Number.isFinite(parsed.overlayScale)
           ? Math.min(2, Math.max(0.8, parsed.overlayScale))
           : DEFAULT_APP_SETTINGS.overlayScale,
+      overlayPosition:
+        parsed.overlayPosition === "top" || parsed.overlayPosition === "bottom"
+          ? parsed.overlayPosition
+          : DEFAULT_APP_SETTINGS.overlayPosition,
+      overlayOffsetX:
+        typeof parsed.overlayOffsetX === "number" && Number.isFinite(parsed.overlayOffsetX)
+          ? Math.min(400, Math.max(-400, parsed.overlayOffsetX))
+          : DEFAULT_APP_SETTINGS.overlayOffsetX,
+      overlayOffsetY:
+        typeof parsed.overlayOffsetY === "number" && Number.isFinite(parsed.overlayOffsetY)
+          ? Math.min(240, Math.max(-240, parsed.overlayOffsetY))
+          : DEFAULT_APP_SETTINGS.overlayOffsetY,
       soundVolume:
         typeof parsed.soundVolume === "number" && Number.isFinite(parsed.soundVolume)
           ? Math.min(1, Math.max(0, parsed.soundVolume))

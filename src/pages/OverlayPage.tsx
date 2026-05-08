@@ -103,6 +103,9 @@ export default function OverlayPage() {
     void invoke("resize_overlay_window_command", {
       width: stageWidth * overlayScale,
       height: stageHeight * overlayScale,
+      position: uiSettingsRef.current.overlayPosition,
+      offsetX: uiSettingsRef.current.overlayOffsetX,
+      offsetY: uiSettingsRef.current.overlayOffsetY,
     }).catch((err) => console.error("resize_overlay_window_command failed:", err));
   }, [isOverlayVisible, overlayScale, stageHeight, stageWidth]);
 

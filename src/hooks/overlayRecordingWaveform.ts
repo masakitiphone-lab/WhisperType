@@ -1,3 +1,4 @@
+import type { MutableRefObject } from "react";
 import {
   WAVEFORM_BAR_COUNT,
   WAVEFORM_FLOW_SPEED,
@@ -48,3 +49,58 @@ export const createDisplayWaveformLevels = (time: number, speechLevel: number) =
     const level = (WAVEFORM_IDLE_BASE_LEVEL + baseWave + speechWave) * edgeMuffler;
     return Math.max(0.02, Math.min(1, level));
   });
+
+type RecordingState = "idle" | "recording" | "transcribing" | "finished";
+
+type RecordingWaveformAnimationOptions = {
+  currentRecordingRef: MutableRefObject<ActiveRecording | null>;
+  speechLevelRef: MutableRefObject<number>;
+  stateRef: MutableRefObject<RecordingState>;
+  waveformAnimationRef: MutableRefObject<number | null>;
+  waveformTimeRef: MutableRefObject<number>;
+  setWaveformLevels: (levels: number[]) => void;
+};
+
+export function startRecordingWaveformAnimation(
+  activeRecording: ActiveRecording,
+  {
+    currentRecordingRef,
+    speechLevelRef,
+    stateRef,
+    waveformAnimationRef,
+    waveformTimeRef,
+    setWaveformLevels,
+  }: RecordingWaveformAnimationOptions,
+) {
+  const updateWaveform = () => {
+    if (stateRef.current !== "recording" || currentRecordingRef.current?.id !== activeRecording.id) {
+      return;
+    }
+
+    activeRecording.analyser.getFloatTimeDomainData(activeRecording.dataArray);
+    waveformTimeRef.current += 1;
+    let sumSquares = 0;
+    let peak = 0;
+    for (const sample of activeRecording.dataArray) {
+      const value = sample ?? 0;
+      const absolute = Math.abs(value);
+      sumSquares += value * value;
+      if (absolute > peak) peak = absolute;
+    }
+
+    const rms = Math.sqrt(sumSquares / activeRecording.dataArray.length);
+    const activityLevel = rms * 0.72 + peak * 0.28;
+    const rawLevel = activityLevel * WAVEFORM_GAIN;
+    speechLevelRef.current = speechLevelRef.current * (1 - WAVEFORM_SMOOTHING) + Math.max(0, Math.min(1, rawLevel)) * WAVEFORM_SMOOTHING;
+    const hasSpeech = speechLevelRef.current > RECORDING_SPEECH_THRESHOLD || rawLevel > RECORDING_SPEECH_RAW_THRESHOLD;
+    if (hasSpeech) {
+      activeRecording.hadSpeech = true;
+      activeRecording.lastSpeechAtMs = Date.now();
+    }
+    setWaveformLevels(createDisplayWaveformLevels(waveformTimeRef.current, speechLevelRef.current));
+    activeRecording.waveformAnimation = requestAnimationFrame(updateWaveform);
+    waveformAnimationRef.current = activeRecording.waveformAnimation;
+  };
+
+  updateWaveform();
+}

@@ -184,7 +184,7 @@ fn start_overlay_session(state: &Arc<HookSharedState>, required_group_count: usi
             .unwrap_or(false);
         append_log_line(&format!("[Shortcut] recording start overlay_ready={overlay_ready}"));
 
-        if let Err(error) = crate::ensure_overlay_event_target(&app_handle) {
+        if let Err(error) = crate::overlay_window::ensure_overlay_event_target(&app_handle) {
             append_log_line(&format!("[Overlay] failed to prepare event target: {error}"));
             return;
         }

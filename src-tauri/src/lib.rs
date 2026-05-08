@@ -4,16 +4,14 @@ mod hotkeys;
 mod audio_processing;
 mod shared;
 mod log_store;
+pub(crate) mod overlay_window;
 mod secure_storage;
 mod tray;
 mod text_input;
 mod windowing;
 mod ms_store;
 
-use tauri::{
-    webview::Color,
-    AppHandle, Emitter, Manager, UserAttentionType, WebviewUrl, WebviewWindowBuilder,
-};
+use tauri::{AppHandle, Emitter, Manager, UserAttentionType, WebviewUrl, WebviewWindowBuilder};
 use reqwest::multipart;
 use hotkeys::{create_hotkey_backend, HotkeyBackend, HotkeyBackendInfo};
 #[cfg(target_os = "macos")]
@@ -28,17 +26,14 @@ use text_input::type_text_internal;
 use log_store::append_log_line;
 use audio_processing::{detect_speech_with_vad, process_audio_with_ffmpeg};
 use tray::setup_tray_clean;
-use windowing::{
-    apply_overlay_visuals, configure_main_window_for_settings, position_window_bottom_center,
-    resize_overlay_window, show_window_without_focus, OVERLAY_HEIGHT,
-    OVERLAY_WIDTH,
-};
+use overlay_window::OverlayLayoutPreferences;
+use windowing::configure_main_window_for_settings;
 use shared::hotkey_events::{
     emit_recording_started, emit_recording_stopped, emit_transcription_finished as emit_transcription_finished_event,
     emit_transcription_prefetch, emit_transcription_started,
 };
 
-use std::{sync::Mutex, thread, time::{Duration, Instant}};
+use std::{sync::Mutex, time::Instant};
 #[cfg(target_os = "windows")]
 use std::process::Command;
 use ms_store::{check_plus_store_license, get_checkout_provider, is_store_build, purchase_plus_via_store};
@@ -60,6 +55,7 @@ struct AppState {
     cached_access_token: Mutex<Option<String>>,
     overlay_ready: Mutex<bool>,
     overlay_last_seen: Mutex<Option<Instant>>,
+    overlay_layout_preferences: Mutex<OverlayLayoutPreferences>,
 }
 
 
@@ -175,7 +171,7 @@ fn register_global_shortcut(app: &AppHandle, shortcut_str: &str) -> Result<Strin
 
 #[tauri::command]
 fn start_recording(app: AppHandle) -> Result<(), String> {
-    ensure_overlay_event_target(&app)?;
+    overlay_window::ensure_overlay_event_target(&app)?;
     let state = app.state::<AppState>();
     let mut recording = state.recording.lock().map_err(|e| e.to_string())?;
     recording.is_recording = true;
@@ -297,178 +293,8 @@ fn probe_macos_native_event_tap_command() -> Result<String, String> {
 }
 
 #[tauri::command]
-fn show_recording_window(app: AppHandle) -> Result<(), String> {
-    ensure_overlay_window(&app, true)
-}
-
-pub fn ensure_overlay_window(app: &AppHandle, visible: bool) -> Result<(), String> {
-    let created_window;
-    let window = if let Some(window) = app.get_webview_window("overlay") {
-        created_window = false;
-        window
-    } else {
-        created_window = true;
-        WebviewWindowBuilder::new(
-        app,
-        "overlay",
-        WebviewUrl::App("overlay.html".into()),
-    )
-    .transparent(true)
-    .shadow(false)
-    .background_color(Color(0, 0, 0, 0))
-    .decorations(false)
-    .always_on_top(true)
-    .skip_taskbar(true)
-    .resizable(false)
-    .inner_size(OVERLAY_WIDTH as f64, OVERLAY_HEIGHT as f64)
-    .visible(false)
-    .build()
-    .map_err(|e| e.to_string())?
-    };
-
-    if created_window {
-        append_log_line("[Overlay] window created");
-    }
-
-    position_window_bottom_center(
-        &window,
-        OVERLAY_WIDTH as f64,
-        OVERLAY_HEIGHT as f64,
-        10.0,
-    );
-
-    apply_overlay_visuals(&window);
-    let _ = window.set_always_on_top(true);
-    if visible {
-        append_log_line("[Overlay] show requested");
-        show_window_without_focus(&window);
-        let retry_window = window.clone();
-        thread::spawn(move || {
-            for delay_ms in [50_u64, 150_u64] {
-                thread::sleep(Duration::from_millis(delay_ms));
-                apply_overlay_visuals(&retry_window);
-                let _ = retry_window.set_always_on_top(true);
-                show_window_without_focus(&retry_window);
-            }
-        });
-    } else {
-        append_log_line("[Overlay] hide requested");
-        let _ = window.hide();
-    }
-
-    Ok(())
-}
-
-fn mark_overlay_seen(app: &AppHandle) -> Result<(), String> {
-    let state = app.state::<AppState>();
-    *state.overlay_ready.lock().map_err(|e| e.to_string())? = true;
-    *state.overlay_last_seen.lock().map_err(|e| e.to_string())? = Some(Instant::now());
-    Ok(())
-}
-
-fn overlay_seen_recently(app: &AppHandle) -> bool {
-    app.state::<AppState>()
-        .overlay_last_seen
-        .lock()
-        .ok()
-        .and_then(|last_seen| *last_seen)
-        .map(|last_seen| last_seen.elapsed() <= Duration::from_secs(30))
-        .unwrap_or(false)
-}
-
-fn wait_for_overlay_ready(app: &AppHandle, timeout: Duration) -> bool {
-    let started_at = Instant::now();
-    while started_at.elapsed() < timeout {
-        if overlay_seen_recently(app) {
-            return true;
-        }
-        thread::sleep(Duration::from_millis(25));
-    }
-    overlay_seen_recently(app)
-}
-
-pub fn ensure_overlay_event_target(app: &AppHandle) -> Result<(), String> {
-    if app.get_webview_window("overlay").is_some() && overlay_seen_recently(app) {
-        return Ok(());
-    }
-
-    append_log_line("[Overlay] event target stale; recreating overlay window");
-    {
-        let state = app.state::<AppState>();
-        if let Ok(mut overlay_ready) = state.overlay_ready.lock() {
-            *overlay_ready = false;
-        }
-        if let Ok(mut overlay_last_seen) = state.overlay_last_seen.lock() {
-            *overlay_last_seen = None;
-        };
-    }
-
-    if let Some(window) = app.get_webview_window("overlay") {
-        let _ = window.close();
-        thread::sleep(Duration::from_millis(80));
-    }
-
-    ensure_overlay_window(app, false)?;
-    if wait_for_overlay_ready(app, Duration::from_millis(1200)) {
-        Ok(())
-    } else {
-        Err("overlay_not_ready".to_string())
-    }
-}
-
-#[tauri::command]
-fn overlay_ready(app: AppHandle) -> Result<(), String> {
-    mark_overlay_seen(&app)?;
-    append_log_line("[Overlay] ready");
-    Ok(())
-}
-
-#[tauri::command]
-fn overlay_heartbeat(app: AppHandle) -> Result<(), String> {
-    mark_overlay_seen(&app)
-}
-
-#[tauri::command]
-fn show_overlay_window(app: AppHandle) -> Result<(), String> {
-    ensure_overlay_window(&app, true)
-}
-
-#[tauri::command]
-fn hide_overlay_window(app: AppHandle) -> Result<(), String> {
-    if let Some(window) = app.get_webview_window("overlay") {
-        let _ = window.hide();
-    }
-    Ok(())
-}
-
-#[tauri::command]
-fn resize_overlay_window_command(app: AppHandle, width: f64, height: f64) -> Result<(), String> {
-    if let Some(window) = app.get_webview_window("overlay") {
-        resize_overlay_window(&window, width, height);
-    }
-    Ok(())
-}
-
-#[tauri::command]
 fn emit_transcription_finished(app: AppHandle) -> Result<(), String> {
     emit_transcription_finished_event(&app);
-    Ok(())
-}
-
-
-#[tauri::command]
-fn close_overlay_window(app: AppHandle) -> Result<(), String> {
-    if let Some(window) = app.get_webview_window("overlay") {
-        let _ = window.close();
-    }
-    Ok(())
-}
-
-#[tauri::command]
-fn hide_recording_window(app: AppHandle) -> Result<(), String> {
-    if let Some(window) = app.get_webview_window("overlay") {
-        let _ = window.hide();
-    }
     Ok(())
 }
 
@@ -638,6 +464,7 @@ pub fn run() {
             cached_access_token: Mutex::new(None),
             overlay_ready: Mutex::new(false),
             overlay_last_seen: Mutex::new(None),
+            overlay_layout_preferences: Mutex::new(OverlayLayoutPreferences::default()),
         })
         .invoke_handler(tauri::generate_handler![
             start_recording,
@@ -652,14 +479,16 @@ pub fn run() {
             get_macos_native_preflight_issues,
             probe_macos_native_event_tap_command,
             request_macos_input_monitoring,
-            show_overlay_window,
-            overlay_ready,
-            overlay_heartbeat,
-            hide_overlay_window,
-            resize_overlay_window_command,
-            close_overlay_window,
-            show_recording_window,
-            hide_recording_window,
+            overlay_window::show_overlay_window,
+            overlay_window::overlay_ready,
+            overlay_window::overlay_heartbeat,
+            overlay_window::hide_overlay_window,
+            overlay_window::resize_overlay_window_command,
+            overlay_window::set_overlay_layout_preferences,
+            overlay_window::get_overlay_layout_preferences,
+            overlay_window::close_overlay_window,
+            overlay_window::show_recording_window,
+            overlay_window::hide_recording_window,
             show_settings_window,
             type_text,
             transcribe_request,
@@ -707,7 +536,7 @@ pub fn run() {
 
             register_global_shortcut(app.handle(), "Ctrl+Alt")?;
 
-            ensure_overlay_window(app.handle(), false).ok();
+            overlay_window::ensure_overlay_window(app.handle(), false).ok();
 
             ensure_windows_autostart().ok();
 

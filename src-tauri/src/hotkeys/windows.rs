@@ -10,13 +10,12 @@ use std::{
 };
 use tauri::AppHandle;
 use windows::Win32::{
-    Foundation::{HMODULE, HWND, LPARAM, LRESULT, WPARAM},
+    Foundation::{HMODULE, LPARAM, LRESULT, WPARAM},
     System::LibraryLoader::GetModuleHandleW,
     UI::WindowsAndMessaging::{
-        CallNextHookEx, DispatchMessageW, GetForegroundWindow, GetMessageW, GetWindowTextW,
-        GetWindowThreadProcessId, SetWindowsHookExW, TranslateMessage, UnhookWindowsHookEx,
-        HC_ACTION, HHOOK, KBDLLHOOKSTRUCT, MSG, LLKHF_INJECTED, WH_KEYBOARD_LL, WM_KEYDOWN,
-        WM_KEYUP, WM_SYSKEYDOWN, WM_SYSKEYUP,
+        CallNextHookEx, DispatchMessageW, GetMessageW, SetWindowsHookExW, TranslateMessage,
+        UnhookWindowsHookEx, HC_ACTION, HHOOK, KBDLLHOOKSTRUCT, MSG, LLKHF_INJECTED,
+        WH_KEYBOARD_LL, WM_KEYDOWN, WM_KEYUP, WM_SYSKEYDOWN, WM_SYSKEYUP,
     },
 };
 
@@ -75,9 +74,25 @@ fn update_pressed_keys(state: &Arc<HookSharedState>, vk: u16, message: u32) {
             pressed.insert(vk);
         }
         WM_SYSKEYUP | WM_KEYUP => {
-            pressed.remove(&vk);
+            remove_released_key(&mut pressed, vk);
         }
         _ => {}
+    }
+}
+
+fn remove_released_key(pressed: &mut HashSet<u16>, vk: u16) {
+    for key in matching_modifier_group(vk).unwrap_or(&[vk]) {
+        pressed.remove(key);
+    }
+}
+
+fn matching_modifier_group(vk: u16) -> Option<&'static [u16]> {
+    match vk {
+        0x10 | 0xA0 | 0xA1 => Some(&[0x10, 0xA0, 0xA1]),
+        0x11 | 0xA2 | 0xA3 => Some(&[0x11, 0xA2, 0xA3]),
+        0x12 | 0xA4 | 0xA5 => Some(&[0x12, 0xA4, 0xA5]),
+        0x5B | 0x5C => Some(&[0x5B, 0x5C]),
+        _ => None,
     }
 }
 
@@ -101,26 +116,6 @@ fn key_is_part_of_binding(vk: u16, required_groups: &[Vec<u16>]) -> bool {
         .any(|group| group.iter().any(|key| *key == vk))
 }
 
-unsafe fn foreground_window_summary() -> String {
-    let foreground_window: HWND = GetForegroundWindow();
-    if foreground_window.0.is_null() {
-        return "foreground=none".to_string();
-    }
-
-    let mut process_id = 0_u32;
-    GetWindowThreadProcessId(foreground_window, Some(&mut process_id));
-
-    let mut title_buffer = [0_u16; 96];
-    let title_len = GetWindowTextW(foreground_window, &mut title_buffer);
-    let title = if title_len > 0 {
-        String::from_utf16_lossy(&title_buffer[..title_len as usize])
-    } else {
-        "(untitled)".to_string()
-    };
-
-    format!("foreground_pid={process_id} foreground_title={title:?}")
-}
-
 fn log_relevant_key_event(state: &Arc<HookSharedState>, vk: u16, message: u32, injected: bool) {
     let required_groups = state.required_groups.lock().unwrap().clone();
     if !key_is_part_of_binding(vk, &required_groups) {
@@ -128,9 +123,8 @@ fn log_relevant_key_event(state: &Arc<HookSharedState>, vk: u16, message: u32, i
     }
 
     let binding_label = state.binding_label.lock().unwrap().clone();
-    let foreground = unsafe { foreground_window_summary() };
     append_log_line(&format!(
-        "[Shortcut] key event binding={binding_label} vk={vk} msg={} injected={injected} {foreground}",
+        "[Shortcut] key event binding={binding_label} vk={vk} msg={} injected={injected}",
         message_label(message),
     ));
 }

@@ -15,7 +15,7 @@ import { useRecordingSounds } from "@/hooks/useRecordingSounds";
 import { createEmptyWaveformLevels, startRecordingWaveformAnimation, type ActiveRecording, type CapsulePhase, type CapturePhase } from "@/hooks/overlayRecordingWaveform";
 import { assertRecordingHasSpeech, buildTranscriptionOverlayNotice, stopRecordingAndCreateBlob } from "@/hooks/overlayRecordingTranscription";
 import { attachOverlayRecordingEventListeners } from "@/hooks/overlayRecordingEvents";
-import { flushPastedTranscriptions, queueTranscriptionPaste } from "@/hooks/overlayRecordingPasteQueue";
+import { PasteFlushError, flushPastedTranscriptions, queueTranscriptionPaste } from "@/hooks/overlayRecordingPasteQueue";
 import {
   CAPSULE_COLLAPSE_DURATION,
   CAPSULE_EXPAND_DURATION,
@@ -317,8 +317,16 @@ export function useOverlayRecordingController() {
           uiSettingsRef.current = readAppSettings();
           if (stopSoundRef.current) stopSoundRef.current.volume = uiSettingsRef.current.soundVolume;
           if (uiSettingsRef.current.playStopSound) void stopSoundRef.current?.play().catch((err) => console.error("Success sound play failed:", err));
-        }).catch((error) => {
+        }).catch(async (error) => {
           console.error("Failed to flush pending transcription text:", error);
+          if (error instanceof PasteFlushError) {
+            keepOverlayVisible = true;
+            await showOverlayNotice({
+              kind: "manual_copy",
+              code: error.message || "paste_failed",
+              text: error.text,
+            });
+          }
         });
       }
       if (
@@ -335,6 +343,9 @@ export function useOverlayRecordingController() {
         setOverlayLayoutMode("capsule");
         setIsOverlayVisible(false);
         await invoke("hide_overlay_window").catch((err) => console.error("hide_overlay_window failed:", err));
+        return;
+      }
+      if (keepOverlayVisible) {
         return;
       }
       scheduleOverlayHideIfIdle();

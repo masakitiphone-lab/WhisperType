@@ -3,6 +3,16 @@ import { invoke } from "@tauri-apps/api/core";
 
 const MAX_PENDING_PASTE_LENGTH = 5000;
 
+export class PasteFlushError extends Error {
+  text: string;
+
+  constructor(message: string, text: string) {
+    super(message);
+    this.name = "PasteFlushError";
+    this.text = text;
+  }
+}
+
 export function queueTranscriptionPaste(pendingPasteTextRef: MutableRefObject<string>, text: string) {
   const normalizedText = text.trim();
   if (!normalizedText) {
@@ -21,17 +31,19 @@ export function queueTranscriptionPaste(pendingPasteTextRef: MutableRefObject<st
 export async function flushPastedTranscriptions(pendingPasteTextRef: MutableRefObject<string>) {
   const combinedText = pendingPasteTextRef.current.trim();
   if (!combinedText) {
-    return;
+    return "";
   }
 
   try {
     await invoke<string>("type_text", { text: `${combinedText} `, useClipboardPaste: true });
-  } catch (error) {
-    await invoke("log_to_terminal", {
-      msg: `[Paste Flush Error] ${error}`,
-    }).catch((err) => console.error("log_to_terminal failed:", err));
-    throw error;
-  } finally {
     pendingPasteTextRef.current = "";
+    return combinedText;
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    await invoke("log_to_terminal", {
+      msg: `[Paste Flush Error] ${errorMessage}`,
+    }).catch((err) => console.error("log_to_terminal failed:", err));
+    pendingPasteTextRef.current = "";
+    throw new PasteFlushError(errorMessage, combinedText);
   }
 }

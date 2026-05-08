@@ -2,6 +2,8 @@ use super::{BindingToken, HotkeyBackend, HotkeyBackendInfo, HotkeyBinding};
 use crate::shared::log::append_log_line;
 use std::{
     collections::HashSet,
+    mem,
+    ptr,
     sync::{
         atomic::{AtomicBool, Ordering},
         mpsc::{self, Sender},
@@ -10,13 +12,20 @@ use std::{
     thread,
 };
 use tauri::AppHandle;
+use windows::core::w;
 use windows::Win32::{
-    Foundation::{HMODULE, LPARAM, LRESULT, WPARAM},
+    Foundation::{HINSTANCE, HWND, LPARAM, LRESULT, WPARAM},
     System::LibraryLoader::GetModuleHandleW,
-    UI::WindowsAndMessaging::{
-        CallNextHookEx, DispatchMessageW, GetMessageW, SetWindowsHookExW, TranslateMessage,
-        UnhookWindowsHookEx, HC_ACTION, HHOOK, KBDLLHOOKSTRUCT, MSG, LLKHF_INJECTED,
-        WH_KEYBOARD_LL, WM_KEYDOWN, WM_KEYUP, WM_SYSKEYDOWN, WM_SYSKEYUP,
+    UI::{
+        Input::{
+            GetRawInputData, RegisterRawInputDevices, HRAWINPUT, RAWINPUT, RAWINPUTDEVICE,
+            RAWINPUTHEADER, RID_INPUT, RIDEV_INPUTSINK, RIM_TYPEKEYBOARD,
+        },
+        WindowsAndMessaging::{
+            CreateWindowExW, DefWindowProcW, DispatchMessageW, GetMessageW, RegisterClassW,
+            TranslateMessage, CW_USEDEFAULT, HWND_MESSAGE, MSG, WM_INPUT, WM_KEYDOWN, WM_KEYUP,
+            WM_SYSKEYDOWN, WM_SYSKEYUP, WNDCLASSW, WS_OVERLAPPED,
+        },
     },
 };
 
@@ -46,7 +55,7 @@ fn shared_state() -> Arc<HookSharedState> {
         .get_or_init(|| {
             let state = Arc::new(HookSharedState::default());
             start_command_thread(state.clone());
-            start_hook_thread(state.clone());
+            start_raw_input_thread(state.clone());
             state
         })
         .clone()
@@ -72,26 +81,76 @@ fn start_command_thread(state: Arc<HookSharedState>) {
     });
 }
 
-fn start_hook_thread(state: Arc<HookSharedState>) {
+fn start_raw_input_thread(state: Arc<HookSharedState>) {
     thread::spawn(move || unsafe {
-        let module = GetModuleHandleW(None).unwrap_or(HMODULE::default());
-        let hook =
-            match SetWindowsHookExW(WH_KEYBOARD_LL, Some(low_level_keyboard_proc), module, 0) {
-                Ok(hook) => hook,
-                Err(error) => {
-                    *state.last_error.lock().unwrap() =
-                        Some(format!("Failed to install Windows keyboard hook: {}", error));
-                    return;
-                }
-            };
+        let module = GetModuleHandleW(None).unwrap_or_default();
+        let instance = HINSTANCE(module.0);
+        let class_name = w!("WhisperTypeRawInputSink");
+        let window_class = WNDCLASSW {
+            lpfnWndProc: Some(raw_input_window_proc),
+            hInstance: instance,
+            lpszClassName: class_name,
+            ..Default::default()
+        };
+
+        let class_atom = RegisterClassW(&window_class);
+        if class_atom == 0 {
+            *state.last_error.lock().unwrap() =
+                Some("Failed to register Windows raw input window class.".to_string());
+            return;
+        }
+
+        let hwnd = match CreateWindowExW(
+            Default::default(),
+            class_name,
+            w!("WhisperTypeRawInputSink"),
+            WS_OVERLAPPED,
+            CW_USEDEFAULT,
+            CW_USEDEFAULT,
+            0,
+            0,
+            HWND_MESSAGE,
+            None,
+            instance,
+            None,
+        ) {
+            Ok(hwnd) => hwnd,
+            Err(error) => {
+                *state.last_error.lock().unwrap() =
+                    Some(format!("Failed to create Windows raw input message window: {error}"));
+                return;
+            }
+        };
+
+        if hwnd.0.is_null() {
+            *state.last_error.lock().unwrap() =
+                Some("Failed to create Windows raw input message window.".to_string());
+            return;
+        }
+
+        let raw_input_devices = [RAWINPUTDEVICE {
+            usUsagePage: 0x01,
+            usUsage: 0x06,
+            dwFlags: RIDEV_INPUTSINK,
+            hwndTarget: hwnd,
+        }];
+
+        if let Err(error) = RegisterRawInputDevices(
+            &raw_input_devices,
+            mem::size_of::<RAWINPUTDEVICE>() as u32,
+        ) {
+            *state.last_error.lock().unwrap() =
+                Some(format!("Failed to register Windows raw input keyboard: {error}"));
+            return;
+        }
+
+        append_log_line("[Shortcut] Windows raw input backend registered");
 
         let mut message = MSG::default();
         while GetMessageW(&mut message, None, 0, 0).into() {
             let _ = TranslateMessage(&message);
             DispatchMessageW(&message);
         }
-
-        let _ = UnhookWindowsHookEx(hook);
     });
 }
 
@@ -171,7 +230,7 @@ fn send_shortcut_command(state: &Arc<HookSharedState>, command: ShortcutCommand)
 
 fn start_overlay_session(state: &Arc<HookSharedState>) {
     if let Some(app_handle) = state.app_handle.lock().unwrap().clone() {
-        if let Err(error) = crate::start_recording_internal(&app_handle, "windows-hook") {
+        if let Err(error) = crate::start_recording_internal(&app_handle, "windows-raw-input") {
             append_log_line(&format!("[Shortcut] start failed: {error}"));
             state.active.store(false, Ordering::SeqCst);
         }
@@ -180,33 +239,62 @@ fn start_overlay_session(state: &Arc<HookSharedState>) {
 
 fn stop_overlay_session(state: &Arc<HookSharedState>) {
     if let Some(app_handle) = state.app_handle.lock().unwrap().clone() {
-        if let Err(error) = crate::stop_recording_internal(&app_handle, "windows-hook") {
+        if let Err(error) = crate::stop_recording_internal(&app_handle, "windows-raw-input") {
             append_log_line(&format!("[Shortcut] stop failed: {error}"));
         }
     }
 }
 
-unsafe extern "system" fn low_level_keyboard_proc(
-    code: i32,
+unsafe extern "system" fn raw_input_window_proc(
+    hwnd: HWND,
+    message: u32,
     w_param: WPARAM,
     l_param: LPARAM,
 ) -> LRESULT {
-    if code == HC_ACTION as i32 {
-        let state = shared_state();
-        let keyboard = *(l_param.0 as *const KBDLLHOOKSTRUCT);
-        let vk = keyboard.vkCode as u16;
-        let message = w_param.0 as u32;
-        let injected = keyboard.flags.contains(LLKHF_INJECTED);
-        if injected {
-            return CallNextHookEx(HHOOK::default(), code, w_param, l_param);
-        }
-        if is_key_event(message) {
-            update_pressed_keys(&state, vk, message);
-            handle_binding_state(&state);
-        }
+    if message == WM_INPUT {
+        process_raw_keyboard_input(HRAWINPUT(l_param.0 as *mut _));
+        return LRESULT(0);
     }
 
-    CallNextHookEx(HHOOK::default(), code, w_param, l_param)
+    DefWindowProcW(hwnd, message, w_param, l_param)
+}
+
+unsafe fn process_raw_keyboard_input(raw_input_handle: HRAWINPUT) {
+    let mut size = 0_u32;
+    let header_size = mem::size_of::<RAWINPUTHEADER>() as u32;
+
+    let _ = GetRawInputData(raw_input_handle, RID_INPUT, None, &mut size, header_size);
+    if size == 0 {
+        return;
+    }
+
+    let mut buffer = vec![0_u8; size as usize];
+    let read = GetRawInputData(
+        raw_input_handle,
+        RID_INPUT,
+        Some(buffer.as_mut_ptr().cast()),
+        &mut size,
+        header_size,
+    );
+    if read == u32::MAX {
+        return;
+    }
+
+    let raw_input = ptr::read_unaligned(buffer.as_ptr().cast::<RAWINPUT>());
+    if raw_input.header.dwType != RIM_TYPEKEYBOARD.0 {
+        return;
+    }
+
+    let keyboard = raw_input.data.keyboard;
+    let vk = keyboard.VKey as u16;
+    let message = keyboard.Message;
+    if !is_key_event(message) {
+        return;
+    }
+
+    let state = shared_state();
+    update_pressed_keys(&state, vk, message);
+    handle_binding_state(&state);
 }
 
 #[allow(dead_code)]
@@ -369,7 +457,7 @@ fn key_to_vk_group(value: &str) -> Result<Vec<u16>, String> {
 
 impl HotkeyBackend for WindowsHookHotkeyBackend {
     fn backend_name(&self) -> &'static str {
-        "windows-hook"
+        "windows-raw-input"
     }
 
     fn info(&self) -> HotkeyBackendInfo {
@@ -402,9 +490,8 @@ impl HotkeyBackend for WindowsHookHotkeyBackend {
                 "Custom keyboard macro key exposed as Unidentified".to_string(),
             ],
             notes: vec![
-                "Uses a Windows low-level keyboard hook backend.".to_string(),
-                "Alt is tracked via WM_SYSKEY* and VK_MENU / VK_LMENU / VK_RMENU state updates."
-                    .to_string(),
+                "Uses a Windows Raw Input backend with RIDEV_INPUTSINK.".to_string(),
+                "Alt is tracked via WM_SYSKEY* and VK_MENU / VK_LMENU / VK_RMENU state updates.".to_string(),
                 "Supports modifier-only chords, function keys, many navigation/system keys, and standard mouse buttons.".to_string(),
                 "Vendor-specific buttons are still planned but not wired yet.".to_string(),
             ],

@@ -6,6 +6,7 @@ import OnboardingModal from "@/components/OnboardingModal";
 import TutorialPracticeModal from "@/components/TutorialPracticeModal";
 import { WelcomeCreditsCelebration } from "@/components/WelcomeCreditsCelebration";
 import { useAuth } from "@/contexts/useAuth";
+import { useMainWindowHotkeySensor } from "@/hooks/useMainWindowHotkeySensor";
 import { getAppCopy, readAppLocale, writeAppLocale, type AppLocale } from "@/lib/appLocale";
 import { normalizeHotkeyForDisplay, normalizeHotkeyForNative } from "@/lib/hotkeys";
 import { readAppSettings, writeAppSettings } from "@/lib/appSettings";
@@ -57,6 +58,7 @@ export default function App() {
   const [pendingPracticeOpen, setPendingPracticeOpen] = useState(false);
   const [welcomeCredits, setWelcomeCredits] = useState<number | null>(null);
   const welcomeCreditsCheckedRef = useRef<Set<string>>(new Set());
+  useMainWindowHotkeySensor();
 
   useEffect(() => {
     writeAppLocale(appLocale);

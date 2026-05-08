@@ -181,6 +181,18 @@ fn stop_recording(app: AppHandle) -> Result<(), String> {
     Ok(())
 }
 
+#[tauri::command]
+fn start_recording_from_main_window(app: AppHandle) -> Result<(), String> {
+    start_recording_internal(&app, "main-window-key-sensor")?;
+    Ok(())
+}
+
+#[tauri::command]
+fn stop_recording_from_main_window(app: AppHandle) -> Result<(), String> {
+    stop_recording_internal(&app, "main-window-key-sensor")?;
+    Ok(())
+}
+
 pub(crate) fn start_recording_internal(app: &AppHandle, source: &str) -> Result<bool, String> {
     if let Ok(cached_access_token) = app.state::<AppState>().cached_access_token.lock() {
         if cached_access_token.is_none() {
@@ -506,6 +518,8 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             start_recording,
             stop_recording,
+            start_recording_from_main_window,
+            stop_recording_from_main_window,
             start_transcription,
             finish_transcription,
             set_global_shortcut,

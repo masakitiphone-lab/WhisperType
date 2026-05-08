@@ -4,6 +4,7 @@ use std::{
     collections::HashSet,
     sync::{
         atomic::{AtomicBool, Ordering},
+        mpsc::{self, Sender},
         Arc, Mutex, OnceLock,
     },
     thread,
@@ -29,19 +30,46 @@ struct HookSharedState {
     pressed_keys: Mutex<HashSet<u16>>,
     active: AtomicBool,
     app_handle: Mutex<Option<AppHandle>>,
+    command_sender: Mutex<Option<Sender<ShortcutCommand>>>,
     last_error: Mutex<Option<String>>,
 }
 
 static HOOK_STATE: OnceLock<Arc<HookSharedState>> = OnceLock::new();
 
+enum ShortcutCommand {
+    Start { binding_label: String },
+    Stop { binding_label: String },
+}
+
 fn shared_state() -> Arc<HookSharedState> {
     HOOK_STATE
         .get_or_init(|| {
             let state = Arc::new(HookSharedState::default());
+            start_command_thread(state.clone());
             start_hook_thread(state.clone());
             state
         })
         .clone()
+}
+
+fn start_command_thread(state: Arc<HookSharedState>) {
+    let (sender, receiver) = mpsc::channel::<ShortcutCommand>();
+    *state.command_sender.lock().unwrap() = Some(sender);
+
+    thread::spawn(move || {
+        while let Ok(command) = receiver.recv() {
+            match command {
+                ShortcutCommand::Start { binding_label } => {
+                    append_log_line(&format!("[Shortcut] matched: {binding_label}"));
+                    start_overlay_session(&state);
+                }
+                ShortcutCommand::Stop { binding_label } => {
+                    append_log_line(&format!("[Shortcut] released: {binding_label}"));
+                    stop_overlay_session(&state);
+                }
+            }
+        }
+    });
 }
 
 fn start_hook_thread(state: Arc<HookSharedState>) {
@@ -100,35 +128,6 @@ fn is_key_event(message: u32) -> bool {
     matches!(message, WM_SYSKEYDOWN | WM_KEYDOWN | WM_SYSKEYUP | WM_KEYUP)
 }
 
-fn message_label(message: u32) -> &'static str {
-    match message {
-        WM_SYSKEYDOWN => "WM_SYSKEYDOWN",
-        WM_KEYDOWN => "WM_KEYDOWN",
-        WM_SYSKEYUP => "WM_SYSKEYUP",
-        WM_KEYUP => "WM_KEYUP",
-        _ => "unknown",
-    }
-}
-
-fn key_is_part_of_binding(vk: u16, required_groups: &[Vec<u16>]) -> bool {
-    required_groups
-        .iter()
-        .any(|group| group.iter().any(|key| *key == vk))
-}
-
-fn log_relevant_key_event(state: &Arc<HookSharedState>, vk: u16, message: u32, injected: bool) {
-    let required_groups = state.required_groups.lock().unwrap().clone();
-    if !key_is_part_of_binding(vk, &required_groups) {
-        return;
-    }
-
-    let binding_label = state.binding_label.lock().unwrap().clone();
-    append_log_line(&format!(
-        "[Shortcut] key event binding={binding_label} vk={vk} msg={} injected={injected}",
-        message_label(message),
-    ));
-}
-
 fn binding_is_down(pressed: &HashSet<u16>, required_groups: &[Vec<u16>]) -> bool {
     !required_groups.is_empty()
         && required_groups
@@ -146,21 +145,32 @@ fn handle_binding_state(state: &Arc<HookSharedState>) {
         (false, true) => {
             state.active.store(true, Ordering::SeqCst);
             let binding_label = state.binding_label.lock().unwrap().clone();
-            append_log_line(&format!("[Shortcut] matched: {binding_label}"));
-            start_overlay_session(state, required_groups.len());
+            send_shortcut_command(state, ShortcutCommand::Start { binding_label });
         }
         (true, false) => {
+            state.active.store(false, Ordering::SeqCst);
             let binding_label = state.binding_label.lock().unwrap().clone();
-            append_log_line(&format!("[Shortcut] released: {binding_label}"));
-            stop_overlay_session(state, "binding_released");
+            send_shortcut_command(state, ShortcutCommand::Stop { binding_label });
         }
         _ => {}
     }
 }
 
-fn start_overlay_session(state: &Arc<HookSharedState>, required_group_count: usize) {
+fn send_shortcut_command(state: &Arc<HookSharedState>, command: ShortcutCommand) {
+    let is_start = matches!(command, ShortcutCommand::Start { .. });
+    let sender = state.command_sender.lock().unwrap().clone();
+    if let Some(sender) = sender {
+        if let Err(error) = sender.send(command) {
+            append_log_line(&format!("[Shortcut] command dispatch failed: {error}"));
+            if is_start {
+                state.active.store(false, Ordering::SeqCst);
+            }
+        }
+    }
+}
+
+fn start_overlay_session(state: &Arc<HookSharedState>) {
     if let Some(app_handle) = state.app_handle.lock().unwrap().clone() {
-        let _ = required_group_count;
         if let Err(error) = crate::start_recording_internal(&app_handle, "windows-hook") {
             append_log_line(&format!("[Shortcut] start failed: {error}"));
             state.active.store(false, Ordering::SeqCst);
@@ -168,13 +178,10 @@ fn start_overlay_session(state: &Arc<HookSharedState>, required_group_count: usi
     }
 }
 
-fn stop_overlay_session(state: &Arc<HookSharedState>, _reason: &str) {
+fn stop_overlay_session(state: &Arc<HookSharedState>) {
     if let Some(app_handle) = state.app_handle.lock().unwrap().clone() {
-        let was_active = state.active.swap(false, Ordering::SeqCst);
-        if was_active {
-            if let Err(error) = crate::stop_recording_internal(&app_handle, "windows-hook") {
-                append_log_line(&format!("[Shortcut] stop failed: {error}"));
-            }
+        if let Err(error) = crate::stop_recording_internal(&app_handle, "windows-hook") {
+            append_log_line(&format!("[Shortcut] stop failed: {error}"));
         }
     }
 }
@@ -190,9 +197,6 @@ unsafe extern "system" fn low_level_keyboard_proc(
         let vk = keyboard.vkCode as u16;
         let message = w_param.0 as u32;
         let injected = keyboard.flags.contains(LLKHF_INJECTED);
-        if is_key_event(message) {
-            log_relevant_key_event(&state, vk, message, injected);
-        }
         if injected {
             return CallNextHookEx(HHOOK::default(), code, w_param, l_param);
         }

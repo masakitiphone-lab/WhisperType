@@ -40,7 +40,7 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   overlayScale: 1,
   overlayPosition: "bottom",
   overlayOffsetX: 0,
-  overlayOffsetY: 120,
+  overlayOffsetY: 180,
   appLocale: "ja",
   showOverlay: true,
   showWaveform: true,

@@ -8,7 +8,8 @@ use windows::core::Interface;
 #[cfg(target_os = "windows")]
 use windows::Win32::UI::Accessibility::{
     CUIAutomation, IUIAutomation, IUIAutomationElement, IUIAutomationValuePattern,
-    UIA_EditControlTypeId, UIA_ValuePatternId,
+    UIA_DocumentControlTypeId, UIA_EditControlTypeId, UIA_TextControlTypeId, UIA_TextPatternId,
+    UIA_CONTROLTYPE_ID, UIA_ValuePatternId,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -107,8 +108,12 @@ fn element_or_parent_is_text_input(
     automation: &IUIAutomation,
     element: IUIAutomationElement,
 ) -> Result<bool, ()> {
-    if is_text_input_element(&element) {
-        return Ok(true);
+    let mut saw_possible_text_target = false;
+
+    match classify_text_input_element(&element) {
+        PasteTargetState::Yes => return Ok(true),
+        PasteTargetState::Unknown => saw_possible_text_target = true,
+        PasteTargetState::No => {}
     }
 
     let walker = unsafe { automation.ControlViewWalker().map_err(|_| ())? };
@@ -119,29 +124,43 @@ fn element_or_parent_is_text_input(
             break;
         };
 
-        if is_text_input_element(&parent) {
-            return Ok(true);
+        match classify_text_input_element(&parent) {
+            PasteTargetState::Yes => return Ok(true),
+            PasteTargetState::Unknown => saw_possible_text_target = true,
+            PasteTargetState::No => {}
         }
 
         current = parent;
     }
 
-    Ok(false)
+    if saw_possible_text_target {
+        Err(())
+    } else {
+        Ok(false)
+    }
 }
 
 #[cfg(target_os = "windows")]
-fn is_text_input_element(element: &IUIAutomationElement) -> bool {
+fn classify_text_input_element(element: &IUIAutomationElement) -> PasteTargetState {
     unsafe {
         let control_type = match element.CurrentControlType() {
             Ok(value) => value,
-            Err(_) => return false,
+            Err(_) => return PasteTargetState::Unknown,
         };
 
         if control_type == UIA_EditControlTypeId {
-            return true;
+            return PasteTargetState::Yes;
         }
 
-        has_editable_value_pattern(element)
+        if has_editable_value_pattern(element) {
+            return PasteTargetState::Yes;
+        }
+
+        if is_possible_custom_text_target(element, control_type) {
+            return PasteTargetState::Unknown;
+        }
+
+        PasteTargetState::No
     }
 }
 
@@ -159,6 +178,29 @@ fn has_editable_value_pattern(element: &IUIAutomationElement) -> bool {
             .CurrentIsReadOnly()
             .map(|is_readonly| !is_readonly.as_bool())
             .unwrap_or(false)
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn is_possible_custom_text_target(
+    element: &IUIAutomationElement,
+    control_type: UIA_CONTROLTYPE_ID,
+) -> bool {
+    unsafe {
+        let is_keyboard_focusable = element
+            .CurrentIsKeyboardFocusable()
+            .map(|value| value.as_bool())
+            .unwrap_or(false);
+
+        if !is_keyboard_focusable {
+            return false;
+        }
+
+        if control_type == UIA_DocumentControlTypeId || control_type == UIA_TextControlTypeId {
+            return true;
+        }
+
+        element.GetCurrentPattern(UIA_TextPatternId).is_ok()
     }
 }
 

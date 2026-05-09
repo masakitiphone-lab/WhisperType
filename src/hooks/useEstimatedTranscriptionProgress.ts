@@ -4,12 +4,19 @@ const MAX_ESTIMATED_PROGRESS = 90;
 const MIN_ESTIMATED_MS = 2200;
 const MAX_ESTIMATED_MS = 16000;
 
+type TranscriptionProgressEstimate = {
+  byteSize: number;
+  durationMs?: number | null;
+};
+
 function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
 }
 
-function estimateTranscriptionMs(byteSize: number) {
-  return clamp(1800 + byteSize / 90, MIN_ESTIMATED_MS, MAX_ESTIMATED_MS);
+function estimateTranscriptionMs({ byteSize, durationMs }: TranscriptionProgressEstimate) {
+  const byteEstimateMs = 1800 + byteSize / 90;
+  const durationEstimateMs = durationMs ? 1400 + durationMs * 0.55 : 0;
+  return clamp(Math.max(byteEstimateMs, durationEstimateMs), MIN_ESTIMATED_MS, MAX_ESTIMATED_MS);
 }
 
 function easeOutCubic(value: number) {
@@ -33,10 +40,10 @@ export function useEstimatedTranscriptionProgress() {
     setProgress(0);
   }, [stop]);
 
-  const start = useCallback((byteSize: number) => {
+  const start = useCallback((estimate: TranscriptionProgressEstimate) => {
     stop();
     const startedAt = performance.now();
-    const estimatedMs = estimateTranscriptionMs(byteSize);
+    const estimatedMs = estimateTranscriptionMs(estimate);
 
     const tick = () => {
       const elapsedRatio = (performance.now() - startedAt) / estimatedMs;

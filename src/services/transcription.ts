@@ -10,6 +10,15 @@ type TranscriptionResponse = {
   remaining_credits?: number;
 };
 
+export type TranscriptionRequestStartInfo = {
+  byteSize: number;
+  durationMs: number | null;
+};
+
+type TranscriptionLifecycle = {
+  onRequestStart?: (info: TranscriptionRequestStartInfo) => void;
+};
+
 type TranscriptionContext = {
   user_id: string;
   daily_credits: number;
@@ -413,7 +422,31 @@ async function invokeTranscriptionRequest(formData: FormData, accessToken: strin
   return data;
 }
 
-export async function transcribeAudio(audioBlob: Blob): Promise<string> {
+async function readAudioDurationMs(blob: Blob): Promise<number | null> {
+  return new Promise((resolve) => {
+    const audio = document.createElement("audio");
+    const objectUrl = URL.createObjectURL(blob);
+    const timeoutId = window.setTimeout(() => cleanup(null), 1200);
+
+    const cleanup = (durationMs: number | null) => {
+      window.clearTimeout(timeoutId);
+      audio.removeAttribute("src");
+      audio.load();
+      URL.revokeObjectURL(objectUrl);
+      resolve(durationMs);
+    };
+
+    audio.preload = "metadata";
+    audio.onloadedmetadata = () => {
+      const durationMs = Number.isFinite(audio.duration) ? Math.max(0, audio.duration * 1000) : null;
+      cleanup(durationMs);
+    };
+    audio.onerror = () => cleanup(null);
+    audio.src = objectUrl;
+  });
+}
+
+export async function transcribeAudio(audioBlob: Blob, lifecycle: TranscriptionLifecycle = {}): Promise<string> {
   if (audioBlob.size === 0) {
     throw new Error("silent_audio");
   }
@@ -440,6 +473,7 @@ export async function transcribeAudio(audioBlob: Blob): Promise<string> {
   if (processedBlob.size === 0) {
     throw new Error("silent_audio");
   }
+  const processedDurationMs = await readAudioDurationMs(processedBlob);
 
   const accessToken = cachedPrefetchState.accessToken;
 
@@ -460,6 +494,7 @@ export async function transcribeAudio(audioBlob: Blob): Promise<string> {
   }
 
   try {
+    lifecycle.onRequestStart?.({ byteSize: processedBlob.size, durationMs: processedDurationMs });
     const data = await invokeTranscriptionRequest(formData, accessToken);
     const text = data.text.trim();
     if (!text) {

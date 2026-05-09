@@ -270,9 +270,10 @@ export function useOverlayRecordingController() {
       await cleanupAudioResources(activeStream, activeAudioContext, activeWaveformAnimation, false);
       try {
         const transcribableBlob = await assertRecordingHasSpeech(recordedBlob, recording.hadSpeech);
-        transcriptionProgress.start(transcribableBlob.size);
         await invoke("start_transcription");
-        const text = await transcribeAudio(transcribableBlob);
+        const text = await transcribeAudio(transcribableBlob, {
+          onRequestStart: transcriptionProgress.start,
+        });
         transcriptionProgress.complete();
         queueTranscriptionPaste(pendingPasteTextRef, text);
         void prefetchTranscriptionReadiness().catch((err) => {

@@ -1,8 +1,8 @@
 import { useCallback, useRef, useState } from "react";
 
 const MAX_ESTIMATED_PROGRESS = 90;
-const MIN_ESTIMATED_MS = 2200;
-const MAX_ESTIMATED_MS = 16000;
+const MIN_ESTIMATED_MS = 1200;
+const MAX_ESTIMATED_MS = 8000;
 
 type TranscriptionProgressEstimate = {
   byteSize: number;
@@ -14,8 +14,8 @@ function clamp(value: number, min: number, max: number) {
 }
 
 function estimateTranscriptionMs({ byteSize, durationMs }: TranscriptionProgressEstimate) {
-  const byteEstimateMs = 1800 + byteSize / 90;
-  const durationEstimateMs = durationMs ? 1400 + durationMs * 0.55 : 0;
+  const byteEstimateMs = 900 + byteSize / 180;
+  const durationEstimateMs = durationMs ? 700 + durationMs * 0.275 : 0;
   return clamp(Math.max(byteEstimateMs, durationEstimateMs), MIN_ESTIMATED_MS, MAX_ESTIMATED_MS);
 }
 

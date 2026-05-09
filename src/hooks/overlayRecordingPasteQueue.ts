@@ -35,8 +35,13 @@ export async function flushPastedTranscriptions(pendingPasteTextRef: MutableRefO
   }
 
   try {
-    await invoke<string>("type_text", { text: `${combinedText} `, useClipboardPaste: true });
+    const pasteResult = await invoke<string>("type_text", { text: `${combinedText} `, useClipboardPaste: true });
     pendingPasteTextRef.current = "";
+
+    if (pasteResult === "paste_sent_target_not_selected") {
+      throw new PasteFlushError("paste_target_not_selected", combinedText);
+    }
+
     return combinedText;
   } catch (error) {
     if (error instanceof PasteFlushError) {

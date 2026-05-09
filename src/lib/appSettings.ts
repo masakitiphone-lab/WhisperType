@@ -31,6 +31,9 @@
 };
 
 const LEGACY_DEFAULT_HOTKEYS = new Set(["Ctrl+Shift+Space", "Ctrl+Alt"]);
+const SETTINGS_STORAGE_KEY = "whispertype-settings";
+const DEFAULT_OVERLAY_OFFSET_Y = 220;
+const LEGACY_DEFAULT_OVERLAY_OFFSET_Y_VALUES = new Set([0, 80, 120, 180]);
 
 export const DEFAULT_APP_SETTINGS: AppSettings = {
   hotkey: "Ctrl+Alt",
@@ -40,7 +43,7 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   overlayScale: 1,
   overlayPosition: "bottom",
   overlayOffsetX: 0,
-  overlayOffsetY: 180,
+  overlayOffsetY: DEFAULT_OVERLAY_OFFSET_Y,
   appLocale: "ja",
   showOverlay: true,
   showWaveform: true,
@@ -60,7 +63,7 @@ export function readAppSettings(): AppSettings {
   }
 
   try {
-    const raw = localStorage.getItem("whispertype-settings");
+    const raw = localStorage.getItem(SETTINGS_STORAGE_KEY);
     if (!raw) {
       return DEFAULT_APP_SETTINGS;
     }
@@ -83,8 +86,26 @@ export function readAppSettings(): AppSettings {
           ? DEFAULT_APP_SETTINGS.hotkey
           : parsed.hotkey
         : DEFAULT_APP_SETTINGS.hotkey;
+    const parsedOverlayPosition =
+      parsed.overlayPosition === "top" || parsed.overlayPosition === "bottom"
+        ? parsed.overlayPosition
+        : DEFAULT_APP_SETTINGS.overlayPosition;
+    const parsedOverlayOffsetX =
+      typeof parsed.overlayOffsetX === "number" && Number.isFinite(parsed.overlayOffsetX)
+        ? Math.min(400, Math.max(-400, parsed.overlayOffsetX))
+        : DEFAULT_APP_SETTINGS.overlayOffsetX;
+    const parsedOverlayOffsetY =
+      typeof parsed.overlayOffsetY === "number" && Number.isFinite(parsed.overlayOffsetY)
+        ? Math.min(240, Math.max(-240, parsed.overlayOffsetY))
+        : DEFAULT_APP_SETTINGS.overlayOffsetY;
+    const overlayOffsetY =
+      parsedOverlayPosition === "bottom" &&
+      parsedOverlayOffsetX === 0 &&
+      LEGACY_DEFAULT_OVERLAY_OFFSET_Y_VALUES.has(parsedOverlayOffsetY)
+        ? DEFAULT_APP_SETTINGS.overlayOffsetY
+        : parsedOverlayOffsetY;
 
-    return {
+    const settings = {
       ...DEFAULT_APP_SETTINGS,
       ...parsed,
       hotkey,
@@ -98,23 +119,20 @@ export function readAppSettings(): AppSettings {
         typeof parsed.overlayScale === "number" && Number.isFinite(parsed.overlayScale)
           ? Math.min(2, Math.max(0.8, parsed.overlayScale))
           : DEFAULT_APP_SETTINGS.overlayScale,
-      overlayPosition:
-        parsed.overlayPosition === "top" || parsed.overlayPosition === "bottom"
-          ? parsed.overlayPosition
-          : DEFAULT_APP_SETTINGS.overlayPosition,
-      overlayOffsetX:
-        typeof parsed.overlayOffsetX === "number" && Number.isFinite(parsed.overlayOffsetX)
-          ? Math.min(400, Math.max(-400, parsed.overlayOffsetX))
-          : DEFAULT_APP_SETTINGS.overlayOffsetX,
-      overlayOffsetY:
-        typeof parsed.overlayOffsetY === "number" && Number.isFinite(parsed.overlayOffsetY)
-          ? Math.min(240, Math.max(-240, parsed.overlayOffsetY))
-          : DEFAULT_APP_SETTINGS.overlayOffsetY,
+      overlayPosition: parsedOverlayPosition,
+      overlayOffsetX: parsedOverlayOffsetX,
+      overlayOffsetY,
       soundVolume:
         typeof parsed.soundVolume === "number" && Number.isFinite(parsed.soundVolume)
           ? Math.min(1, Math.max(0, parsed.soundVolume))
           : DEFAULT_APP_SETTINGS.soundVolume,
     };
+
+    if (overlayOffsetY !== parsedOverlayOffsetY) {
+      localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(settings));
+    }
+
+    return settings;
   } catch {
     return DEFAULT_APP_SETTINGS;
   }
@@ -127,7 +145,7 @@ export function writeAppSettings(nextSettings: Partial<AppSettings>) {
 
   const current = readAppSettings();
   localStorage.setItem(
-    "whispertype-settings",
+    SETTINGS_STORAGE_KEY,
     JSON.stringify({
       ...current,
       ...nextSettings,

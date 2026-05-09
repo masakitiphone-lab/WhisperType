@@ -32,7 +32,7 @@ impl Default for OverlayLayoutPreferences {
             overlay_scale: 1.0,
             overlay_position: "bottom".to_string(),
             overlay_offset_x: 0.0,
-            overlay_offset_y: 80.0,
+            overlay_offset_y: 120.0,
         }
     }
 }

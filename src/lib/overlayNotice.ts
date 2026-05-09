@@ -27,9 +27,9 @@ type NoticeCopy = {
   message: string;
 };
 
-const NOTICE_WIDTH = 236;
-const ERROR_HEIGHT = 118;
-const MANUAL_COPY_HEIGHT = 154;
+const NOTICE_WIDTH = 268;
+const ERROR_HEIGHT = 104;
+const MANUAL_COPY_HEIGHT = 136;
 
 export function classifyOverlayError(errorMessage: string): OverlayNoticePayload {
   const normalized = errorMessage.toLowerCase();
@@ -124,21 +124,21 @@ function getManualCopyNotice(locale: AppLocale, code: string): NoticeCopy {
 
   if (locale === "ja") {
     return {
-      title: isPasteTargetMissing ? "入力先を確認してください" : "入力できなかった可能性があります",
+      title: isPasteTargetMissing ? "入力先を確認" : "貼り付けを確認",
       message: "必要なら下の文面をコピーしてください。",
     };
   }
 
   if (locale === "es") {
     return {
-      title: isPasteTargetMissing ? "Revisa el destino" : "Puede que no se haya pegado",
-      message: "Copia el texto de abajo si hace falta.",
+      title: isPasteTargetMissing ? "Revisa el destino" : "Revisa el pegado",
+      message: "Copia el texto si hace falta.",
     };
   }
 
   return {
-    title: isPasteTargetMissing ? "Check the target" : "Paste may have failed",
-    message: "Copy the text below if needed.",
+    title: isPasteTargetMissing ? "Check the target" : "Check the paste",
+    message: "Copy the text if needed.",
   };
 }
 
@@ -149,48 +149,48 @@ function getErrorNotice(locale: AppLocale, code: string): NoticeCopy {
 
 const ERROR_COPY: Record<AppLocale, Record<string, NoticeCopy>> = {
   ja: {
-    auth_required: { title: "サインインが必要です", message: "アプリを開いてサインインしてください。" },
-    insufficient_credits: { title: "利用上限です", message: "プランまたは残り回数を確認してください。" },
-    usage_protection: { title: "一時的に利用できません", message: "少し待ってから再試行してください。" },
+    auth_required: { title: "サインインが必要", message: "アプリを開いてください。" },
+    insufficient_credits: { title: "利用上限です", message: "プランを確認してください。" },
+    usage_protection: { title: "一時的に利用不可", message: "少し待って再試行してください。" },
     transcription_timeout: { title: "時間がかかっています", message: "もう一度お試しください。" },
-    ctrl_v_send_failed: { title: "貼り付けできませんでした", message: "必要なら手動でコピーしてください。" },
-    paste_target_not_selected: { title: "入力先を確認してください", message: "入力欄を選んで再試行してください。" },
-    microphone_unavailable: { title: "マイクを使えません", message: "権限と入力デバイスを確認してください。" },
+    ctrl_v_send_failed: { title: "貼り付け失敗", message: "必要ならコピーしてください。" },
+    paste_target_not_selected: { title: "入力先を確認", message: "入力欄を選んでください。" },
+    microphone_unavailable: { title: "マイクを使えません", message: "権限を確認してください。" },
     invalid_audio: { title: "音声を処理できません", message: "もう一度録音してください。" },
-    empty_transcription: { title: "文字が見つかりません", message: "声量やマイクを確認してください。" },
-    profile_unavailable: { title: "アカウント確認に失敗", message: "少し待ってから再試行してください。" },
-    provider_unavailable: { title: "サービスに接続できません", message: "通信状況を確認してください。" },
-    history_store_failed: { title: "履歴を保存できません", message: "文字起こしは完了しています。" },
-    transcription_failed: { title: "文字起こしに失敗", message: "もう一度お試しください。" },
+    empty_transcription: { title: "文字が見つかりません", message: "声量を確認してください。" },
+    profile_unavailable: { title: "確認に失敗", message: "少し待って再試行してください。" },
+    provider_unavailable: { title: "接続できません", message: "通信状況を確認してください。" },
+    history_store_failed: { title: "履歴保存に失敗", message: "文字起こしは完了しています。" },
+    transcription_failed: { title: "文字起こし失敗", message: "もう一度お試しください。" },
   },
   en: {
-    auth_required: { title: "Sign in required", message: "Open the app and sign in." },
-    insufficient_credits: { title: "Limit reached", message: "Check your plan or credits." },
-    usage_protection: { title: "Temporarily unavailable", message: "Wait a moment and try again." },
+    auth_required: { title: "Sign in required", message: "Open the app." },
+    insufficient_credits: { title: "Limit reached", message: "Check your plan." },
+    usage_protection: { title: "Unavailable", message: "Wait and try again." },
     transcription_timeout: { title: "Taking too long", message: "Try again." },
-    ctrl_v_send_failed: { title: "Paste failed", message: "Copy manually if needed." },
-    paste_target_not_selected: { title: "Check the target", message: "Select an input field and retry." },
-    microphone_unavailable: { title: "Microphone unavailable", message: "Check permissions and input device." },
+    ctrl_v_send_failed: { title: "Paste failed", message: "Copy if needed." },
+    paste_target_not_selected: { title: "Check target", message: "Select an input field." },
+    microphone_unavailable: { title: "No microphone", message: "Check permissions." },
     invalid_audio: { title: "Audio failed", message: "Record again." },
-    empty_transcription: { title: "No text found", message: "Check volume or microphone." },
-    profile_unavailable: { title: "Account check failed", message: "Wait a moment and retry." },
-    provider_unavailable: { title: "Service unavailable", message: "Check your connection." },
-    history_store_failed: { title: "History not saved", message: "Transcription completed." },
-    transcription_failed: { title: "Transcription failed", message: "Try again." },
+    empty_transcription: { title: "No text found", message: "Check your volume." },
+    profile_unavailable: { title: "Check failed", message: "Wait and retry." },
+    provider_unavailable: { title: "No connection", message: "Check your network." },
+    history_store_failed: { title: "History failed", message: "Transcription completed." },
+    transcription_failed: { title: "Failed", message: "Try again." },
   },
   es: {
-    auth_required: { title: "Inicia sesion", message: "Abre la app e inicia sesion." },
-    insufficient_credits: { title: "Limite alcanzado", message: "Revisa tu plan o creditos." },
-    usage_protection: { title: "No disponible", message: "Espera un momento e intentalo de nuevo." },
+    auth_required: { title: "Inicia sesion", message: "Abre la app." },
+    insufficient_credits: { title: "Limite alcanzado", message: "Revisa tu plan." },
+    usage_protection: { title: "No disponible", message: "Espera y reintenta." },
     transcription_timeout: { title: "Tarda demasiado", message: "Intentalo de nuevo." },
-    ctrl_v_send_failed: { title: "No se pudo pegar", message: "Copia manualmente si hace falta." },
-    paste_target_not_selected: { title: "Revisa el destino", message: "Selecciona un campo y reintenta." },
-    microphone_unavailable: { title: "Microfono no disponible", message: "Revisa permisos y entrada." },
+    ctrl_v_send_failed: { title: "No se pudo pegar", message: "Copia si hace falta." },
+    paste_target_not_selected: { title: "Revisa destino", message: "Selecciona un campo." },
+    microphone_unavailable: { title: "Sin microfono", message: "Revisa permisos." },
     invalid_audio: { title: "Audio no valido", message: "Graba de nuevo." },
-    empty_transcription: { title: "No se encontro texto", message: "Revisa volumen o microfono." },
-    profile_unavailable: { title: "Fallo la cuenta", message: "Espera un momento y reintenta." },
-    provider_unavailable: { title: "Servicio no disponible", message: "Revisa tu conexion." },
-    history_store_failed: { title: "Historial no guardado", message: "La transcripcion termino." },
-    transcription_failed: { title: "Fallo la transcripcion", message: "Intentalo de nuevo." },
+    empty_transcription: { title: "Sin texto", message: "Revisa el volumen." },
+    profile_unavailable: { title: "Fallo revision", message: "Espera y reintenta." },
+    provider_unavailable: { title: "Sin conexion", message: "Revisa la red." },
+    history_store_failed: { title: "Fallo historial", message: "Transcripcion completa." },
+    transcription_failed: { title: "Fallo", message: "Intentalo de nuevo." },
   },
 };

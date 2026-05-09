@@ -32,8 +32,7 @@
 
 const LEGACY_DEFAULT_HOTKEYS = new Set(["Ctrl+Shift+Space", "Ctrl+Alt"]);
 const SETTINGS_STORAGE_KEY = "whispertype-settings";
-const DEFAULT_OVERLAY_OFFSET_Y = 220;
-const LEGACY_DEFAULT_OVERLAY_OFFSET_Y_VALUES = new Set([0, 80, 120, 180]);
+const LEGACY_DEFAULT_OVERLAY_OFFSET_Y_VALUES = new Set([80, 120, 180, 220]);
 
 export const DEFAULT_APP_SETTINGS: AppSettings = {
   hotkey: "Ctrl+Alt",
@@ -43,7 +42,7 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   overlayScale: 1,
   overlayPosition: "bottom",
   overlayOffsetX: 0,
-  overlayOffsetY: DEFAULT_OVERLAY_OFFSET_Y,
+  overlayOffsetY: 0,
   appLocale: "ja",
   showOverlay: true,
   showWaveform: true,

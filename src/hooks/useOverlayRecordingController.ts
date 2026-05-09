@@ -336,13 +336,7 @@ export function useOverlayRecordingController() {
         !isStartingRef.current &&
         pendingTranscriptionsRef.current === 0
       ) {
-        updateState("idle");
-        updateCapsulePhase("idle");
-        setCapsuleMounted(false);
-        setSpinnerPhase("hidden");
-        setOverlayLayoutMode("capsule");
-        setIsOverlayVisible(false);
-        await invoke("hide_overlay_window").catch((err) => console.error("hide_overlay_window failed:", err));
+        scheduleOverlayHideIfIdle();
         return;
       }
       if (keepOverlayVisible) {

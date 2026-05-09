@@ -120,7 +120,7 @@ pub fn position_overlay_window(
         let x = position.x + (size.width - width) / 2.0 + offset_x;
         let anchor_y = match overlay_position {
             OverlayPosition::Top => size.height * 0.18,
-            OverlayPosition::Bottom => size.height * 0.88,
+            OverlayPosition::Bottom => size.height * 0.92,
         };
         let y = position.y + anchor_y - (height / 2.0) + vertical_offset;
         let _ = window.set_position(tauri::Position::Logical(tauri::LogicalPosition { x, y }));

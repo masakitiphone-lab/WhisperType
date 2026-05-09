@@ -10,7 +10,7 @@ import {
 import { readAppLocale, type AppLocale } from "@/lib/appLocale";
 import { readAppSettings, writeAppSettings } from "@/lib/appSettings";
 import { buildOverlayNotice, type OverlayNoticePayload, type OverlayNoticeViewModel } from "@/lib/overlayNotice";
-import { prefetchTranscriptionReadiness, transcribeAudio } from "@/services/transcription";
+import { assertTranscriptionCanStart, prefetchTranscriptionReadiness, transcribeAudio } from "@/services/transcription";
 import { useRecordingSounds } from "@/hooks/useRecordingSounds";
 import { useEstimatedTranscriptionProgress } from "@/hooks/useEstimatedTranscriptionProgress";
 import { createEmptyWaveformLevels, startRecordingWaveformAnimation, type ActiveRecording, type CapsulePhase, type CapturePhase } from "@/hooks/overlayRecordingWaveform";
@@ -22,9 +22,6 @@ import {
   CAPSULE_EXPAND_DURATION,
   getOverlayCapsuleStageHeight,
   getOverlayCapsuleStageWidth,
-  getOverlayNoticeContentHeight,
-  getOverlayNoticeStageHeight,
-  getOverlayNoticeStageWidth,
 } from "@/lib/overlayLayout";
 import { readOverlayLayoutPreferences, resizeOverlayWindowForPreferences, type OverlayLayoutPreferences } from "@/lib/overlayLayoutPreferences";
 
@@ -86,6 +83,7 @@ export function useOverlayRecordingController() {
     if (immediate) {
       setOverlayNotice(null);
       setIsOverlayVisible(false);
+      await invoke("hide_overlay_notice_window");
       await invoke("hide_overlay_window");
       return;
     }
@@ -96,11 +94,11 @@ export function useOverlayRecordingController() {
         return;
       }
       setOverlayNotice(null);
+      await invoke("hide_overlay_notice_window");
       await invoke("hide_overlay_window");
       noticeDismissTimeoutRef.current = null;
     }, shouldReduceMotion ? 80 : 180);
   };
-  const openAppFromOverlay = async () => invoke("show_settings_window");
   const showOverlayNotice = async (payload: OverlayNoticePayload) => {
     if (finishTimeoutRef.current) window.clearTimeout(finishTimeoutRef.current);
     if (spinnerHideTimeoutRef.current) window.clearTimeout(spinnerHideTimeoutRef.current);
@@ -112,9 +110,12 @@ export function useOverlayRecordingController() {
     setSpinnerPhase("hidden");
     transcriptionProgress.reset();
     updateCapsulePhase("idle");
-    setOverlayNotice(buildOverlayNotice(appLocaleRef.current, payload));
+    const notice = buildOverlayNotice(appLocaleRef.current, payload);
+    setOverlayNotice(notice);
     updateState("idle");
-    setIsOverlayVisible(true);
+    setIsOverlayVisible(false);
+    await invoke("hide_overlay_window").catch((err) => console.error("hide_overlay_window failed:", err));
+    await invoke("show_overlay_notice_window", { notice }).catch((err) => console.error("show_overlay_notice_window failed:", err));
   };
   const beginTranscriptionTransition = () => {
     if (finishTimeoutRef.current) window.clearTimeout(finishTimeoutRef.current);
@@ -125,8 +126,8 @@ export function useOverlayRecordingController() {
     setSpinnerPhase("visible");
     updateState("transcribing");
   };
-  const stageWidth = overlayNotice ? getOverlayNoticeStageWidth(overlayNotice.width) : getOverlayCapsuleStageWidth();
-  const stageHeight = overlayNotice ? getOverlayNoticeStageHeight(getOverlayNoticeContentHeight(overlayNotice)) : getOverlayCapsuleStageHeight();
+  const stageWidth = getOverlayCapsuleStageWidth();
+  const stageHeight = getOverlayCapsuleStageHeight();
   stageWidthRef.current = stageWidth;
   stageHeightRef.current = stageHeight;
   useEffect(() => {
@@ -345,6 +346,19 @@ export function useOverlayRecordingController() {
         await showOverlayWindowForCurrentSettings(activeGeneration);
         return;
       }
+
+      try {
+        await assertTranscriptionCanStart();
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        const overlayError = buildTranscriptionOverlayNotice(errorMessage);
+        await invoke("finish_transcription").catch((err) => console.error("finish_transcription failed:", err));
+        if (overlayError) {
+          await showOverlayNotice(overlayError);
+        }
+        return;
+      }
+
       const recordingGeneration = overlayGenerationRef.current + 1;
       overlayGenerationRef.current = recordingGeneration;
       pendingStopWhileStartingRef.current = false;
@@ -358,6 +372,7 @@ export function useOverlayRecordingController() {
       spinnerHideTimeoutRef.current = null;
       noticeDismissTimeoutRef.current = null;
       setOverlayNotice(null);
+      await invoke("hide_overlay_notice_window").catch((err) => console.error("hide_overlay_notice_window failed:", err));
       setSpinnerPhase("hidden");
       transcriptionProgress.reset();
       setCapsuleMounted(true);
@@ -479,7 +494,6 @@ export function useOverlayRecordingController() {
     overlayScale,
     setOverlayNotice,
     clearOverlayNotice,
-    openAppFromOverlay,
     stageWidth,
     stageHeight,
     shouldReduceMotion,

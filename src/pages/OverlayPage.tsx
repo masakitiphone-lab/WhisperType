@@ -1,8 +1,7 @@
 import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { AnimatePresence, motion } from "motion/react";
+import { AnimatePresence } from "motion/react";
 import { CapsuleShell } from "@/components/overlay/CapsuleShell";
-import { OverlayNoticePanel } from "@/components/overlay/OverlayNoticePanel";
 import { TransitioningOverlayIcon } from "@/components/overlay/TransitioningOverlayIcon";
 import { WaveformStrip } from "@/components/overlay/WaveformStrip";
 import { useRecordingController } from "@/hooks/RecordingControllerContext";
@@ -16,41 +15,13 @@ import {
   getCapsuleAnimationWidth,
   getCapsuleWidthProgress,
   getIconTravelX,
-  getOverlayNoticeContentHeight,
   getPhaseAnimationProgress,
   getWaveformPhaseOpacity,
 } from "@/lib/overlayLayout";
 
-const TRANSITION_EASE = [0.25, 0.1, 0.25, 1] as const;
-
-const glassShellMotion = {
-  initial: { opacity: 0, y: 14, scale: 0.955 },
-  animate: {
-    opacity: 1,
-    y: 0,
-    scale: 1,
-    transition: {
-      opacity: { duration: 0.22, ease: TRANSITION_EASE },
-      y: { duration: 0.26, ease: TRANSITION_EASE },
-      scale: { duration: 0.3, ease: TRANSITION_EASE },
-    },
-  },
-  exit: {
-    opacity: 0,
-    y: 8,
-    scale: 0.975,
-    transition: {
-      opacity: { duration: 0.16, ease: TRANSITION_EASE },
-      y: { duration: 0.18, ease: TRANSITION_EASE },
-      scale: { duration: 0.2, ease: TRANSITION_EASE },
-    },
-  },
-} as const;
-
 export default function OverlayPage() {
   const {
     recordingState,
-    overlayNotice,
     overlayPresentationVersion,
     isOverlayVisible,
     waveformLevels,
@@ -60,8 +31,6 @@ export default function OverlayPage() {
     spinnerPhase,
     transcriptionProgress,
     overlayScale,
-    clearOverlayNotice,
-    openAppFromOverlay,
     stageWidth,
     stageHeight,
     shouldReduceMotion,
@@ -80,25 +49,20 @@ export default function OverlayPage() {
     return () => window.cancelAnimationFrame(frame);
   }, []);
 
-  const showCapsule = recordingState === "recording" && !overlayNotice;
+  const showCapsule = recordingState === "recording";
   const showWaveform = recordingState === "recording" && uiSettingsRef.current.showWaveform;
   const showCapsuleContent = capsulePhase === "settled" && showCapsule;
   const capsuleRadius = BASE_HEIGHT / 2;
   const iconBallSize = BASE_HEIGHT - 4;
   const iconBallInnerSize = 24;
   const capsuleContentBandWidth = getCapsuleExpandedWidth();
-  const showTransitionIcon = !overlayNotice && (showCapsule || capsulePhase === "closing" || spinnerPhase !== "hidden");
+  const showTransitionIcon = showCapsule || capsulePhase === "closing" || spinnerPhase !== "hidden";
   const capsuleAnimationProgress = getPhaseAnimationProgress(capsulePhase, now - capsulePhaseStartedAt);
   const capsuleWidthProgress = getCapsuleWidthProgress(capsulePhase, now - capsulePhaseStartedAt);
   const capsuleAnimatedWidth = getCapsuleAnimationWidth(capsuleWidthProgress);
   const capsuleRenderWidth = Math.max(capsuleAnimatedWidth, capsuleContentBandWidth);
   const iconTravelX = getIconTravelX(capsuleAnimationProgress, stageWidth, capsuleContentBandWidth, iconBallSize);
   const waveformOpacity = getWaveformPhaseOpacity(capsulePhase, now - capsulePhaseStartedAt);
-  const noticeWidth = overlayNotice?.width ?? 320;
-  const noticeHeight = overlayNotice ? getOverlayNoticeContentHeight(overlayNotice) : 112;
-  const resizeOffsetY = overlayNotice
-    ? uiSettingsRef.current.overlayOffsetY - (noticeHeight * overlayScale) / 2
-    : uiSettingsRef.current.overlayOffsetY;
 
   useEffect(() => {
     if (!isOverlayVisible) {
@@ -109,9 +73,9 @@ export default function OverlayPage() {
       height: stageHeight * overlayScale,
       position: uiSettingsRef.current.overlayPosition,
       offsetX: uiSettingsRef.current.overlayOffsetX,
-      offsetY: resizeOffsetY,
+      offsetY: uiSettingsRef.current.overlayOffsetY,
     }).catch((err) => console.error("resize_overlay_window_command failed:", err));
-  }, [isOverlayVisible, overlayScale, resizeOffsetY, stageHeight, stageWidth]);
+  }, [isOverlayVisible, overlayScale, stageHeight, stageWidth]);
 
   return (
     <div
@@ -141,59 +105,6 @@ export default function OverlayPage() {
         }}
       >
         <div style={{ position: "relative", width: "100%", height: "100%", background: "transparent" }}>
-          <AnimatePresence mode="wait" initial={false}>
-            {isOverlayVisible && overlayNotice ? (
-              <div
-                style={{
-                  position: "absolute",
-                  left: "50%",
-                  top: "50%",
-                  width: `${noticeWidth}px`,
-                  height: `${noticeHeight}px`,
-                  transform: "translate(-50%, -50%)",
-                  pointerEvents: "auto",
-                }}
-              >
-                <motion.div
-                  key={`notice-${overlayPresentationVersion}`}
-                  initial={glassShellMotion.initial}
-                  animate={glassShellMotion.animate}
-                  exit={glassShellMotion.exit}
-                  style={{
-                    width: "100%",
-                    height: "100%",
-                    borderRadius: "12px",
-                    background: "transparent",
-                    border: "none",
-                    boxShadow: "none",
-                    padding: "0",
-                    transformOrigin: "center bottom",
-                  }}
-                >
-                  <OverlayNoticePanel
-                    notice={overlayNotice}
-                    reduceMotion={!!shouldReduceMotion}
-                    onClose={() => {
-                      void clearOverlayNotice();
-                    }}
-                    onOpenApp={async () => {
-                      await openAppFromOverlay();
-                      await clearOverlayNotice();
-                    }}
-                    onCopy={
-                      overlayNotice.copyLabel && overlayNotice.text
-                        ? async () => {
-                          await navigator.clipboard.writeText(overlayNotice.text ?? "");
-                          await clearOverlayNotice();
-                        }
-                        : undefined
-                    }
-                  />
-                </motion.div>
-              </div>
-            ) : null}
-          </AnimatePresence>
-
           <AnimatePresence mode="wait" initial={false}>
             {isOverlayVisible && capsuleMounted ? (
               <div

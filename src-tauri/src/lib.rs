@@ -56,6 +56,7 @@ struct AppState {
     overlay_ready: Mutex<bool>,
     overlay_last_seen: Mutex<Option<Instant>>,
     overlay_layout_preferences: Mutex<OverlayLayoutPreferences>,
+    overlay_notice: Mutex<Option<serde_json::Value>>,
 }
 
 
@@ -502,6 +503,7 @@ pub fn run() {
             overlay_ready: Mutex::new(false),
             overlay_last_seen: Mutex::new(None),
             overlay_layout_preferences: Mutex::new(OverlayLayoutPreferences::default()),
+            overlay_notice: Mutex::new(None),
         })
         .invoke_handler(tauri::generate_handler![
             start_recording,
@@ -520,6 +522,9 @@ pub fn run() {
             overlay_window::overlay_ready,
             overlay_window::overlay_heartbeat,
             overlay_window::hide_overlay_window,
+            overlay_window::show_overlay_notice_window,
+            overlay_window::hide_overlay_notice_window,
+            overlay_window::get_overlay_notice,
             overlay_window::resize_overlay_window_command,
             overlay_window::set_overlay_layout_preferences,
             overlay_window::get_overlay_layout_preferences,
@@ -573,7 +578,7 @@ pub fn run() {
 
             register_global_shortcut(app.handle(), "Ctrl+Alt")?;
 
-            overlay_window::ensure_overlay_window(app.handle(), false).ok();
+            overlay_window::preload_overlay_windows(app.handle()).ok();
 
             ensure_windows_autostart().ok();
 

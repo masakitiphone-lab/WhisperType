@@ -27,6 +27,7 @@ export default defineConfig({
       input: {
         main: path.resolve(__dirname, "index.html"),
         overlay: path.resolve(__dirname, "overlay.html"),
+        overlayNotice: path.resolve(__dirname, "overlay_notice.html"),
       },
     },
   },

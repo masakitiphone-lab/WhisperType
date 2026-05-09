@@ -65,6 +65,29 @@ function getPrefetchCache() {
   return cachedPrefetch;
 }
 
+function hasAvailableTranscriptionCredit(context: TranscriptionContext) {
+  return context.is_unlimited || (context.available_credits ?? 0) > 0;
+}
+
+async function readFreshTranscriptionReadiness() {
+  const accessToken = await getUsableAccessToken();
+  const userId = await getSessionUserId(accessToken);
+  if (!userId) {
+    throw new Error("auth_required: no authenticated user id");
+  }
+  const context = await getTranscriptionContext(userId, accessToken);
+  setPrefetchCache(accessToken, context);
+  return { accessToken, context, cachedAt: nowMs() };
+}
+
+export async function assertTranscriptionCanStart() {
+  const readiness = await readFreshTranscriptionReadiness();
+  if (!hasAvailableTranscriptionCredit(readiness.context)) {
+    cachedPrefetch = null;
+    throw new Error("insufficient_credits");
+  }
+}
+
 function getJwtExpiry(accessToken: string): number | null {
   const parts = accessToken.split(".");
   if (parts.length < 2) {
@@ -357,13 +380,7 @@ async function getTranscriptionContext(userId: string, accessToken: string): Pro
 
 export async function prefetchTranscriptionReadiness() {
   try {
-    const accessToken = await getUsableAccessToken();
-    const userId = await getSessionUserId(accessToken);
-    if (!userId) {
-      return;
-    }
-    const context = await getTranscriptionContext(userId, accessToken);
-    setPrefetchCache(accessToken, context);
+    await readFreshTranscriptionReadiness();
   } catch (error) {
     console.warn("prefetch_failed", error instanceof Error ? error.message : String(error));
   }
@@ -454,19 +471,15 @@ export async function transcribeAudio(audioBlob: Blob, lifecycle: TranscriptionL
   globalThis.__whispertype_hotkey_up_at_ms ??= nowMs();
   let cachedPrefetchState = getPrefetchCache();
   if (!cachedPrefetchState) {
-    const accessToken = await getUsableAccessToken();
-    const userId = await getSessionUserId(accessToken);
-    if (!userId) {
-      throw new Error("auth_required: no authenticated user id");
-    }
-    const context = await getTranscriptionContext(userId, accessToken);
-    cachedPrefetchState = { accessToken, context, cachedAt: nowMs() };
-    setPrefetchCache(accessToken, context);
+    cachedPrefetchState = await readFreshTranscriptionReadiness();
   }
 
-  if (!cachedPrefetchState.context.is_unlimited && (cachedPrefetchState.context.available_credits ?? 0) <= 0) {
-    cachedPrefetch = null;
-    throw new Error("insufficient_credits");
+  if (!hasAvailableTranscriptionCredit(cachedPrefetchState.context)) {
+    cachedPrefetchState = await readFreshTranscriptionReadiness();
+    if (!hasAvailableTranscriptionCredit(cachedPrefetchState.context)) {
+      cachedPrefetch = null;
+      throw new Error("insufficient_credits");
+    }
   }
 
   const processedBlob = await preprocessAudioBlobForTranscription(audioBlob);

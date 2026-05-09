@@ -8,6 +8,8 @@
     "build": "tsc && vite build",
     "preview": "vite preview",
     "validate:release": "node scripts/validate-release-env.mjs",
+    "validate:store-release": "node scripts/validate-store-release.mjs",
+    "release:store": "npm run validate:store-release && npm run validate:release && npm run tauri -- build --no-bundle && npm run tauri -- bundle --config src-tauri/tauri.microsoftstore.conf.json",
     "tauri": "tauri"
   },
   "dependencies": {

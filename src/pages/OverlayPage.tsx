@@ -58,6 +58,7 @@ export default function OverlayPage() {
     capsulePhaseStartedAt,
     capsuleMounted,
     spinnerPhase,
+    transcriptionProgress,
     overlayScale,
     clearOverlayNotice,
     openAppFromOverlay,
@@ -240,6 +241,7 @@ export default function OverlayPage() {
                 key={`transition-icon-${overlayPresentationVersion}`}
                 phase={capsulePhase}
                 spinnerPhase={spinnerPhase}
+                progress={transcriptionProgress}
                 x={iconTravelX}
                 height={BASE_HEIGHT}
                 iconSize={iconBallSize}

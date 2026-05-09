@@ -12,6 +12,7 @@ import { readAppSettings, writeAppSettings } from "@/lib/appSettings";
 import { buildOverlayNotice, type OverlayNoticePayload, type OverlayNoticeViewModel } from "@/lib/overlayNotice";
 import { prefetchTranscriptionReadiness, transcribeAudio } from "@/services/transcription";
 import { useRecordingSounds } from "@/hooks/useRecordingSounds";
+import { useEstimatedTranscriptionProgress } from "@/hooks/useEstimatedTranscriptionProgress";
 import { createEmptyWaveformLevels, startRecordingWaveformAnimation, type ActiveRecording, type CapsulePhase, type CapturePhase } from "@/hooks/overlayRecordingWaveform";
 import { assertRecordingHasSpeech, buildTranscriptionOverlayNotice, stopRecordingAndCreateBlob } from "@/hooks/overlayRecordingTranscription";
 import { attachOverlayRecordingEventListeners } from "@/hooks/overlayRecordingEvents";
@@ -33,8 +34,7 @@ export function useOverlayRecordingController() {
   const [capsulePhase, setCapsulePhase] = useState<CapsulePhase>("idle");
   const [capsuleMounted, setCapsuleMounted] = useState(false);
   const [spinnerPhase, setSpinnerPhase] = useState<"hidden" | "closing" | "visible">("hidden");
-  const [overlayLayoutMode, setOverlayLayoutMode] = useState<"capsule" | "spinner" | "notice">("capsule");
-  const [overlayPresentationVersion, setOverlayPresentationVersion] = useState(0);
+  const overlayPresentationVersion = 0;
   const [isOverlayVisible, setIsOverlayVisible] = useState(false);
   const [capsulePhaseStartedAt, setCapsulePhaseStartedAt] = useState(() => Date.now());
   const [waveformLevels, setWaveformLevels] = useState<number[]>(() => createEmptyWaveformLevels());
@@ -65,6 +65,7 @@ export function useOverlayRecordingController() {
   const overlayGenerationRef = useRef(0);
   const pendingStopWhileStartingRef = useRef(false);
   const { startSoundRef, stopSoundRef } = useRecordingSounds();
+  const transcriptionProgress = useEstimatedTranscriptionProgress();
   const uiSettingsRef = useRef(readAppSettings());
   const appLocaleRef = useRef<AppLocale>(readAppLocale());
   const shouldReduceMotion = !!useReducedMotion();
@@ -99,16 +100,6 @@ export function useOverlayRecordingController() {
       noticeDismissTimeoutRef.current = null;
     }, shouldReduceMotion ? 80 : 180);
   };
-  const replayTranscriptionPresentation = () => {
-    if (finishTimeoutRef.current) window.clearTimeout(finishTimeoutRef.current);
-    if (spinnerHideTimeoutRef.current) window.clearTimeout(spinnerHideTimeoutRef.current);
-    finishTimeoutRef.current = null;
-    spinnerHideTimeoutRef.current = null;
-    setSpinnerPhase("hidden");
-    setOverlayLayoutMode("capsule");
-    setOverlayPresentationVersion((current) => current + 1);
-    setIsOverlayVisible(true);
-  };
   const openAppFromOverlay = async () => invoke("show_settings_window");
   const showOverlayNotice = async (payload: OverlayNoticePayload) => {
     if (finishTimeoutRef.current) window.clearTimeout(finishTimeoutRef.current);
@@ -119,9 +110,9 @@ export function useOverlayRecordingController() {
     noticeDismissTimeoutRef.current = null;
     setCapsuleMounted(false);
     setSpinnerPhase("hidden");
+    transcriptionProgress.reset();
     updateCapsulePhase("idle");
     setOverlayNotice(buildOverlayNotice(appLocaleRef.current, payload));
-    setOverlayLayoutMode("notice");
     updateState("idle");
     setIsOverlayVisible(true);
   };
@@ -132,7 +123,6 @@ export function useOverlayRecordingController() {
     spinnerHideTimeoutRef.current = null;
     updateCapsulePhase("closing");
     setSpinnerPhase("visible");
-    setOverlayLayoutMode("spinner");
     updateState("transcribing");
   };
   const stageWidth = overlayNotice ? getOverlayNoticeStageWidth(overlayNotice.width) : getOverlayCapsuleStageWidth();
@@ -280,8 +270,10 @@ export function useOverlayRecordingController() {
       await cleanupAudioResources(activeStream, activeAudioContext, activeWaveformAnimation, false);
       try {
         const transcribableBlob = await assertRecordingHasSpeech(recordedBlob, recording.hadSpeech);
+        transcriptionProgress.start(transcribableBlob.size);
         await invoke("start_transcription");
         const text = await transcribeAudio(transcribableBlob);
+        transcriptionProgress.complete();
         queueTranscriptionPaste(pendingPasteTextRef, text);
         void prefetchTranscriptionReadiness().catch((err) => {
           console.warn("Post-transcription prefetch failed:", err);
@@ -296,9 +288,9 @@ export function useOverlayRecordingController() {
         const overlayError = buildTranscriptionOverlayNotice(errorMessage);
         if (overlayError) {
           keepOverlayVisible = true;
+          transcriptionProgress.reset();
           await showOverlayNotice(overlayError);
         }
-        return;
         return;
       } finally {
         pendingTranscriptionsRef.current = Math.max(0, pendingTranscriptionsRef.current - 1);
@@ -365,8 +357,8 @@ export function useOverlayRecordingController() {
       spinnerHideTimeoutRef.current = null;
       noticeDismissTimeoutRef.current = null;
       setOverlayNotice(null);
-      setOverlayLayoutMode("capsule");
       setSpinnerPhase("hidden");
+      transcriptionProgress.reset();
       setCapsuleMounted(true);
       updateCapsulePhase("expanding");
       updateState("recording");
@@ -482,22 +474,13 @@ export function useOverlayRecordingController() {
     capsulePhase,
     capsuleMounted,
     spinnerPhase,
-    overlayLayoutMode,
+    transcriptionProgress: transcriptionProgress.progress,
     overlayScale,
     setOverlayNotice,
     clearOverlayNotice,
     openAppFromOverlay,
-    replayTranscriptionPresentation,
     stageWidth,
     stageHeight,
-    setCapsulePhase,
-    setCapsuleMounted,
-    setSpinnerPhase,
-    setOverlayLayoutMode,
-    setOverlayPresentationVersion,
-    setIsOverlayVisible,
-    setWaveformLevels,
-    setOverlayScale,
     shouldReduceMotion,
     uiSettingsRef,
   };

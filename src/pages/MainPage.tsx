@@ -10,6 +10,7 @@ import { getOverlayCapsuleStageHeight, getOverlayCapsuleStageWidth } from "@/lib
 import { resizeOverlayWindowForPreferences, selectOverlayLayoutPreferences, setNativeOverlayLayoutPreferences } from "@/lib/overlayLayoutPreferences";
 import { readOverlayScale } from "@/lib/uiPreferences";
 import { requestPreferredAudioStream } from "@/lib/audioCapture";
+import { smoothScrollElementIntoView } from "@/lib/smoothScroll";
 import { supabase } from "@/lib/supabase";
 import { DEFAULT_HOTKEY, LANGUAGE_OPTIONS, MODEL_OPTIONS, getUiCopy, type HotkeyBackendInfo } from "@/pages/settingsPageData";
 import { useNavigate } from "react-router-dom";
@@ -269,7 +270,10 @@ export default function MainPage({
 
 
   const scrollToSection = (id: string) => {
-    sectionRefs.current[id]?.scrollIntoView({ behavior: "smooth", block: "start" });
+    const section = sectionRefs.current[id];
+    if (section) {
+      smoothScrollElementIntoView(section, { offset: 16 });
+    }
     setActiveSection(id as MainPageSectionId);
   };
 

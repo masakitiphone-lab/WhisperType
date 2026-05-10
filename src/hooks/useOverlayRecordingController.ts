@@ -378,7 +378,7 @@ export function useOverlayRecordingController() {
       setCapsuleMounted(true);
       updateCapsulePhase("expanding");
       updateState("recording");
-      setIsOverlayVisible(uiSettingsRef.current.showOverlay);
+      setIsOverlayVisible(true);
       await showOverlayWindowForCurrentSettings(recordingGeneration);
       if (uiSettingsRef.current.playStartSound) {
         void startSoundRef.current?.play().catch((err) => console.error("Start sound play failed:", err));

@@ -1,5 +1,3 @@
-use std::{thread, time::Duration};
-
 use tauri::{
     webview::Color, AppHandle, Emitter, Manager, WebviewUrl, WebviewWindowBuilder,
 };
@@ -137,25 +135,17 @@ pub(crate) fn overlay_ready(app: AppHandle) -> Result<(), String> {
         .overlay_ready
         .store(true, std::sync::atomic::Ordering::SeqCst);
     append_log_line("[Overlay] ready");
-    Ok(())
-}
 
-pub(crate) fn wait_for_overlay_ready(app: &AppHandle, timeout: Duration) -> bool {
-    let started_at = std::time::Instant::now();
-    while started_at.elapsed() < timeout {
-        if app
-            .state::<AppState>()
-            .overlay_ready
-            .load(std::sync::atomic::Ordering::SeqCst)
-        {
-            return true;
-        }
-        thread::sleep(Duration::from_millis(25));
+    if state
+        .pending_recording_start
+        .swap(false, std::sync::atomic::Ordering::SeqCst)
+    {
+        append_log_line("[Overlay] releasing pending recording start");
+        let _ = app.emit("recording-started", ());
+        let _ = app.emit("transcription-prefetch", ());
     }
 
-    app.state::<AppState>()
-        .overlay_ready
-        .load(std::sync::atomic::Ordering::SeqCst)
+    Ok(())
 }
 
 

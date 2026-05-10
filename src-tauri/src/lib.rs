@@ -56,6 +56,7 @@ struct AppState {
     pending_deep_links: Mutex<Vec<String>>,
     cached_access_token: Mutex<Option<String>>,
     overlay_ready: AtomicBool,
+    pending_recording_start: AtomicBool,
     overlay_layout_preferences: Mutex<OverlayLayoutPreferences>,
     overlay_notice: Mutex<Option<serde_json::Value>>,
 }
@@ -204,22 +205,14 @@ pub(crate) fn start_recording_internal(app: &AppHandle, source: &str) -> Result<
     drop(recording);
 
     state.overlay_ready.store(false, Ordering::SeqCst);
+    state.pending_recording_start.store(true, Ordering::SeqCst);
     if let Err(error) = overlay_window::show_overlay_window(app.clone()) {
         let mut recording = state.recording.lock().map_err(|e| e.to_string())?;
         recording.is_recording = false;
         recording.is_transcribing = false;
+        state.pending_recording_start.store(false, Ordering::SeqCst);
         return Err(error);
     }
-
-    if !overlay_window::wait_for_overlay_ready(app, std::time::Duration::from_millis(1200)) {
-        let mut recording = state.recording.lock().map_err(|e| e.to_string())?;
-        recording.is_recording = false;
-        recording.is_transcribing = false;
-        return Err("overlay_not_ready".to_string());
-    }
-
-    app.emit("recording-started", ()).ok();
-    app.emit("transcription-prefetch", ()).ok();
 
     Ok(true)
 }
@@ -511,6 +504,7 @@ pub fn run() {
             pending_deep_links: Mutex::new(Vec::new()),
             cached_access_token: Mutex::new(None),
             overlay_ready: AtomicBool::new(false),
+            pending_recording_start: AtomicBool::new(false),
             overlay_layout_preferences: Mutex::new(OverlayLayoutPreferences::default()),
             overlay_notice: Mutex::new(None),
         })

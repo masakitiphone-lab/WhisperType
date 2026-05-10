@@ -81,10 +81,16 @@ async function readFreshTranscriptionReadiness() {
 }
 
 export async function assertTranscriptionCanStart() {
-  const readiness = await readFreshTranscriptionReadiness();
+  let readiness = getPrefetchCache();
+  if (!readiness) {
+    readiness = await readFreshTranscriptionReadiness();
+  }
   if (!hasAvailableTranscriptionCredit(readiness.context)) {
-    cachedPrefetch = null;
-    throw new Error("insufficient_credits");
+    readiness = await readFreshTranscriptionReadiness();
+    if (!hasAvailableTranscriptionCredit(readiness.context)) {
+      cachedPrefetch = null;
+      throw new Error("insufficient_credits");
+    }
   }
 }
 
@@ -513,7 +519,10 @@ export async function transcribeAudio(audioBlob: Blob, lifecycle: TranscriptionL
     if (!text) {
       throw new Error("empty_transcription");
     }
-    cachedPrefetch = null;
+    if (cachedPrefetchState && typeof data.remaining_credits === "number") {
+      cachedPrefetchState.context.available_credits = data.remaining_credits;
+      cachedPrefetchState.cachedAt = nowMs();
+    }
     return text;
   } catch (error) {
     const errorCode = error instanceof Error ? error.message : "transcription_failed";

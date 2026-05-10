@@ -20,6 +20,9 @@ function OverlayNoticeApp() {
     }).then((listener) => {
       unlisten = listener;
     });
+    void invoke("overlay_notice_ready").catch((error) => {
+      console.error("overlay_notice_ready failed:", error);
+    });
     return () => unlisten?.();
   }, []);
 

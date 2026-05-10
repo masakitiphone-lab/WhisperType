@@ -1,8 +1,3 @@
-use std::{
-    thread,
-    time::{Duration, Instant},
-};
-
 use tauri::{
     webview::Color, AppHandle, Emitter, Manager, WebviewUrl, WebviewWindowBuilder,
 };
@@ -43,6 +38,19 @@ impl Default for OverlayLayoutPreferences {
 pub(crate) fn preload_overlay_windows(app: &AppHandle) -> Result<(), String> {
     ensure_overlay_window(app, false)?;
     ensure_overlay_notice_window(app, false)?;
+
+    // Force the webviews to load while the app is still starting up.
+    let overlay = app
+        .get_webview_window("overlay")
+        .ok_or_else(|| "overlay_preload_failed".to_string())?;
+    show_window_without_focus(&overlay);
+    let _ = overlay.hide();
+    let notice = app
+        .get_webview_window("overlay_notice")
+        .ok_or_else(|| "overlay_notice_preload_failed".to_string())?;
+    show_window_without_focus(&notice);
+    let _ = notice.hide();
+
     Ok(())
 }
 
@@ -93,15 +101,6 @@ pub(crate) fn ensure_overlay_window(app: &AppHandle, visible: bool) -> Result<()
         append_log_line("[Overlay] show requested");
         configure_recording_overlay_window(&window);
         show_window_without_focus(&window);
-        let retry_window = window.clone();
-        thread::spawn(move || {
-            for delay_ms in [50_u64, 150_u64] {
-                thread::sleep(Duration::from_millis(delay_ms));
-                configure_recording_overlay_window(&retry_window);
-                let _ = retry_window.set_always_on_top(true);
-                show_window_without_focus(&retry_window);
-            }
-        });
     } else {
         append_log_line("[Overlay] hide requested");
         configure_recording_overlay_window(&window);
@@ -129,79 +128,14 @@ fn hide_recording_overlay_window(window: &tauri::WebviewWindow) {
     let _ = window.hide();
 }
 
-fn mark_overlay_seen(app: &AppHandle) -> Result<(), String> {
-    let state = app.state::<AppState>();
-    *state.overlay_ready.lock().map_err(|error| error.to_string())? = true;
-    *state
-        .overlay_last_seen
-        .lock()
-        .map_err(|error| error.to_string())? = Some(Instant::now());
-    Ok(())
-}
-
-fn overlay_seen_recently(app: &AppHandle) -> bool {
-    app.state::<AppState>()
-        .overlay_last_seen
-        .lock()
-        .ok()
-        .and_then(|last_seen| *last_seen)
-        .map(|last_seen| last_seen.elapsed() <= Duration::from_secs(30))
-        .unwrap_or(false)
-}
-
-fn wait_for_overlay_ready(app: &AppHandle, timeout: Duration) -> bool {
-    let started_at = Instant::now();
-    while started_at.elapsed() < timeout {
-        if overlay_seen_recently(app) {
-            return true;
-        }
-        thread::sleep(Duration::from_millis(25));
-    }
-    overlay_seen_recently(app)
-}
-
-pub(crate) fn ensure_overlay_event_target(app: &AppHandle) -> Result<(), String> {
-    if app.get_webview_window("overlay").is_some() {
-        if overlay_seen_recently(app) || wait_for_overlay_ready(app, Duration::from_millis(1200)) {
-            return Ok(());
-        }
-    }
-
-    append_log_line("[Overlay] event target stale; recreating overlay window");
-    {
-        let state = app.state::<AppState>();
-        if let Ok(mut overlay_ready) = state.overlay_ready.lock() {
-            *overlay_ready = false;
-        }
-        if let Ok(mut overlay_last_seen) = state.overlay_last_seen.lock() {
-            *overlay_last_seen = None;
-        };
-    }
-
-    if let Some(window) = app.get_webview_window("overlay") {
-        let _ = window.close();
-        thread::sleep(Duration::from_millis(80));
-    }
-
-    ensure_overlay_window(app, false)?;
-    if wait_for_overlay_ready(app, Duration::from_millis(1200)) {
-        Ok(())
-    } else {
-        Err("overlay_not_ready".to_string())
-    }
-}
-
 #[tauri::command]
 pub(crate) fn overlay_ready(app: AppHandle) -> Result<(), String> {
-    mark_overlay_seen(&app)?;
+    let _ = app.state::<AppState>();
     append_log_line("[Overlay] ready");
     Ok(())
 }
 
-#[tauri::command]
-pub(crate) fn overlay_heartbeat(app: AppHandle) -> Result<(), String> {
-    mark_overlay_seen(&app)
-}
+
 
 #[tauri::command]
 pub(crate) fn show_overlay_window(app: AppHandle) -> Result<(), String> {
@@ -318,6 +252,13 @@ pub(crate) fn hide_overlay_notice_window(app: AppHandle) -> Result<(), String> {
         configure_notice_overlay_window(&window);
         let _ = window.hide();
     }
+    Ok(())
+}
+
+#[tauri::command]
+pub(crate) fn overlay_notice_ready(app: AppHandle) -> Result<(), String> {
+    append_log_line("[OverlayNotice] ready");
+    let _ = app.state::<AppState>();
     Ok(())
 }
 

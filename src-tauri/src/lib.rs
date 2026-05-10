@@ -29,11 +29,12 @@ use tray::setup_tray_clean;
 use overlay_window::OverlayLayoutPreferences;
 use windowing::configure_main_window_for_settings;
 use shared::hotkey_events::{
-    emit_recording_started, emit_recording_stopped, emit_transcription_finished as emit_transcription_finished_event,
-    emit_transcription_prefetch, emit_transcription_started,
+    emit_recording_stopped,
+    emit_transcription_finished as emit_transcription_finished_event,
+    emit_transcription_started,
 };
 
-use std::{sync::Mutex, time::Instant};
+use std::sync::Mutex;
 #[cfg(target_os = "windows")]
 use std::process::Command;
 use ms_store::{check_plus_store_license, get_checkout_provider, is_store_build, purchase_plus_via_store};
@@ -53,8 +54,6 @@ struct AppState {
     hotkey_backend: Box<dyn HotkeyBackend>,
     pending_deep_links: Mutex<Vec<String>>,
     cached_access_token: Mutex<Option<String>>,
-    overlay_ready: Mutex<bool>,
-    overlay_last_seen: Mutex<Option<Instant>>,
     overlay_layout_preferences: Mutex<OverlayLayoutPreferences>,
     overlay_notice: Mutex<Option<serde_json::Value>>,
 }
@@ -202,15 +201,16 @@ pub(crate) fn start_recording_internal(app: &AppHandle, source: &str) -> Result<
     recording.is_transcribing = false;
     drop(recording);
 
-    if let Err(error) = overlay_window::ensure_overlay_event_target(app) {
+    if let Err(error) = overlay_window::ensure_overlay_window(app, true) {
         let mut recording = state.recording.lock().map_err(|e| e.to_string())?;
         recording.is_recording = false;
         recording.is_transcribing = false;
         return Err(error);
     }
 
-    emit_recording_started(app);
-    emit_transcription_prefetch(app);
+    app.emit("recording-started", ()).ok();
+    app.emit("transcription-prefetch", ()).ok();
+
     Ok(true)
 }
 
@@ -500,8 +500,6 @@ pub fn run() {
             hotkey_backend: create_hotkey_backend(),
             pending_deep_links: Mutex::new(Vec::new()),
             cached_access_token: Mutex::new(None),
-            overlay_ready: Mutex::new(false),
-            overlay_last_seen: Mutex::new(None),
             overlay_layout_preferences: Mutex::new(OverlayLayoutPreferences::default()),
             overlay_notice: Mutex::new(None),
         })
@@ -520,7 +518,7 @@ pub fn run() {
             request_macos_input_monitoring,
             overlay_window::show_overlay_window,
             overlay_window::overlay_ready,
-            overlay_window::overlay_heartbeat,
+            overlay_window::overlay_notice_ready,
             overlay_window::hide_overlay_window,
             overlay_window::show_overlay_notice_window,
             overlay_window::hide_overlay_notice_window,
@@ -578,7 +576,9 @@ pub fn run() {
 
             register_global_shortcut(app.handle(), "Ctrl+Alt")?;
 
-            overlay_window::preload_overlay_windows(app.handle()).ok();
+            if let Err(error) = overlay_window::preload_overlay_windows(app.handle()) {
+                append_log_line(&format!("[Overlay] preload failed: {error}"));
+            }
 
             ensure_windows_autostart().ok();
 

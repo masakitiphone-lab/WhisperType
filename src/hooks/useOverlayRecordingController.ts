@@ -240,7 +240,7 @@ export function useOverlayRecordingController() {
         ...readAppSettings(),
         ...overlayLayoutPreferences,
       };
-      if (!uiSettingsRef.current.showOverlay || !overlayGenerationIsCurrent(generation)) {
+      if (!overlayGenerationIsCurrent(generation)) {
         return;
       }
       await resizeOverlayWindowForPreferences(

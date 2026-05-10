@@ -135,16 +135,6 @@ pub(crate) fn overlay_ready(app: AppHandle) -> Result<(), String> {
         .overlay_ready
         .store(true, std::sync::atomic::Ordering::SeqCst);
     append_log_line("[Overlay] ready");
-
-    if state
-        .pending_recording_start
-        .swap(false, std::sync::atomic::Ordering::SeqCst)
-    {
-        append_log_line("[Overlay] releasing pending recording start");
-        let _ = app.emit("recording-started", ());
-        let _ = app.emit("transcription-prefetch", ());
-    }
-
     Ok(())
 }
 

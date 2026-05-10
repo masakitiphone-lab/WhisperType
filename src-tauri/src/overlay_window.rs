@@ -1,3 +1,5 @@
+use std::{thread, time::Duration};
+
 use tauri::{
     webview::Color, AppHandle, Emitter, Manager, WebviewUrl, WebviewWindowBuilder,
 };
@@ -130,9 +132,30 @@ fn hide_recording_overlay_window(window: &tauri::WebviewWindow) {
 
 #[tauri::command]
 pub(crate) fn overlay_ready(app: AppHandle) -> Result<(), String> {
-    let _ = app.state::<AppState>();
+    let state = app.state::<AppState>();
+    state
+        .overlay_ready
+        .store(true, std::sync::atomic::Ordering::SeqCst);
     append_log_line("[Overlay] ready");
     Ok(())
+}
+
+pub(crate) fn wait_for_overlay_ready(app: &AppHandle, timeout: Duration) -> bool {
+    let started_at = std::time::Instant::now();
+    while started_at.elapsed() < timeout {
+        if app
+            .state::<AppState>()
+            .overlay_ready
+            .load(std::sync::atomic::Ordering::SeqCst)
+        {
+            return true;
+        }
+        thread::sleep(Duration::from_millis(25));
+    }
+
+    app.state::<AppState>()
+        .overlay_ready
+        .load(std::sync::atomic::Ordering::SeqCst)
 }
 
 

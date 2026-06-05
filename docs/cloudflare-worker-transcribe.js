@@ -1,12 +1,34 @@
 export default {
   async fetch(req, env) {
     const MAX_AUDIO_BYTES = 25 * 1024 * 1024;
+    const REQUEST_TIMEOUT_MS = 30_000;
 
     const readResponseText = async (response) => {
       try {
         return await response.text();
       } catch {
         return "";
+      }
+    };
+
+    const fetchWithTimeout = async (input, init, timeoutLabel) => {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(timeoutLabel), REQUEST_TIMEOUT_MS);
+      try {
+        return await fetch(input, {
+          ...init,
+          signal: controller.signal,
+        });
+      } catch (error) {
+        if (error instanceof DOMException && error.name === "AbortError") {
+          throw new Error(`${timeoutLabel}_timeout`);
+        }
+        if (typeof error === "string" && error === timeoutLabel) {
+          throw new Error(`${timeoutLabel}_timeout`);
+        }
+        throw error;
+      } finally {
+        clearTimeout(timeoutId);
       }
     };
 
@@ -118,12 +140,12 @@ export default {
         return json({ error: "auth_required" }, 401, origin);
       }
 
-      const userResponse = await fetch(`${supabaseUrl}/auth/v1/user`, {
+      const userResponse = await fetchWithTimeout(`${supabaseUrl}/auth/v1/user`, {
         headers: {
           apikey: serviceRoleKey,
           Authorization: `Bearer ${accessToken}`,
         },
-      });
+      }, "auth_lookup");
 
       if (!userResponse.ok) {
         return json({ error: "auth_required" }, 401, origin);
@@ -136,7 +158,7 @@ export default {
         return json({ error: "auth_required" }, 401, origin);
       }
 
-      const contextResponse = await fetch(`${supabaseUrl}/rest/v1/rpc/get_transcription_context`, {
+      const contextResponse = await fetchWithTimeout(`${supabaseUrl}/rest/v1/rpc/get_transcription_context`, {
         method: "POST",
         headers: {
           apikey: serviceRoleKey,
@@ -144,7 +166,7 @@ export default {
           "Content-Type": "application/json",
         },
         body: "{}",
-      });
+      }, "context_lookup");
 
       if (!contextResponse.ok) {
         throw new Error(
@@ -164,7 +186,8 @@ export default {
       }
 
       const contentType = req.headers.get("content-type") || "";
-      if (!contentType.toLowerCase().includes("multipart/form-data")) {
+      const normalizedContentType = contentType.toLowerCase();
+      if (!normalizedContentType.includes("multipart/form-data")) {
         throw new Error(`invalid_content_type: ${contentType || "missing"}`);
       }
 
@@ -182,9 +205,11 @@ export default {
       const gatewayAccountId = env.CF_AI_GATEWAY_ACCOUNT_ID;
       const gatewayId = env.CF_AI_GATEWAY_ID;
       const gatewayToken = env.CF_AIG_TOKEN || "";
+      const groqApiKey = env.GROQ_API_KEY || "";
+      const useDirectGroq = !gatewayAccountId || !gatewayId;
 
-      if (!gatewayAccountId || !gatewayId) {
-        throw new Error("server_misconfigured: missing_cloudflare_gateway_env");
+      if (useDirectGroq && !groqApiKey) {
+        throw new Error("server_misconfigured: missing_groq_api_key");
       }
 
       const groqFormData = new FormData();
@@ -202,17 +227,25 @@ export default {
         groqFormData.append("prompt", prompt.trim());
       }
 
-      const gatewayHeaders = {};
-      if (gatewayToken) {
-        gatewayHeaders["cf-aig-authorization"] = `Bearer ${gatewayToken}`;
-      }
-
-      const gatewayBaseUrl = `https://gateway.ai.cloudflare.com/v1/${gatewayAccountId}/${gatewayId}/groq`;
-      const transcriptionResponse = await fetch(`${gatewayBaseUrl}/audio/transcriptions`, {
-        method: "POST",
-        headers: gatewayHeaders,
-        body: groqFormData,
-      });
+      const transcriptionResponse = await fetchWithTimeout(
+        useDirectGroq
+          ? "https://api.groq.com/openai/v1/audio/transcriptions"
+          : `https://gateway.ai.cloudflare.com/v1/${gatewayAccountId}/${gatewayId}/groq/audio/transcriptions`,
+        {
+          method: "POST",
+          headers: useDirectGroq
+            ? {
+                Authorization: `Bearer ${groqApiKey}`,
+              }
+            : gatewayToken
+              ? {
+                  "cf-aig-authorization": `Bearer ${gatewayToken}`,
+                }
+              : {},
+          body: groqFormData,
+        },
+        "transcription"
+      );
 
       if (!transcriptionResponse.ok) {
         const body = await readResponseText(transcriptionResponse);
@@ -226,7 +259,7 @@ export default {
         throw new Error("empty_transcription");
       }
 
-      const recordResponse = await fetch(`${supabaseUrl}/rest/v1/rpc/record_transcription`, {
+      const recordResponse = await fetchWithTimeout(`${supabaseUrl}/rest/v1/rpc/record_transcription`, {
         method: "POST",
         headers: {
           apikey: serviceRoleKey,
@@ -238,7 +271,7 @@ export default {
           transcribed_text_param: text,
           credits_used_param: 1,
         }),
-      });
+      }, "record_transcription");
 
       if (!recordResponse.ok) {
         const body = await readResponseText(recordResponse);

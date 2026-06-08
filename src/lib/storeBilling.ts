@@ -40,5 +40,13 @@ export function getStorePurchaseErrorMessage(error: unknown) {
     return "store_build_required";
   }
 
+  if (message.includes("plus_not_available_on_macos")) {
+    return "plus_not_available_on_macos";
+  }
+
+  if (message.includes("plus_not_available_on_platform")) {
+    return "plus_not_available_on_platform";
+  }
+
   return "store_purchase_failed";
 }

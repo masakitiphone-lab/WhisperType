@@ -1,7 +1,11 @@
 use serde::Serialize;
 
-const CHECKOUT_PROVIDER: &str = "ms-store";
 const PLUS_STORE_PRODUCT_ID: Option<&str> = option_env!("WHISPERTYPE_PLUS_STORE_ID");
+
+#[cfg(target_os = "windows")]
+const CHECKOUT_PROVIDER: &str = "ms-store";
+#[cfg(target_os = "macos")]
+const CHECKOUT_PROVIDER: &str = "macos-direct";
 
 #[derive(Clone, Serialize)]
 pub struct CheckoutProviderInfo {
@@ -13,10 +17,21 @@ pub struct CheckoutProviderInfo {
 pub fn get_checkout_provider() -> Result<CheckoutProviderInfo, String> {
     Ok(CheckoutProviderInfo {
         provider: CHECKOUT_PROVIDER.to_string(),
-        plus_product_configured: PLUS_STORE_PRODUCT_ID
-            .map(|value| !value.trim().is_empty())
-            .unwrap_or(false),
+        plus_product_configured: plus_is_configured(),
     })
+}
+
+fn plus_is_configured() -> bool {
+    #[cfg(target_os = "windows")]
+    {
+        PLUS_STORE_PRODUCT_ID
+            .map(|value| !value.trim().is_empty())
+            .unwrap_or(false)
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        false
+    }
 }
 
 #[tauri::command]
@@ -86,14 +101,29 @@ mod store_impl {
     }
 }
 
-#[cfg(not(target_os = "windows"))]
+#[cfg(target_os = "macos")]
 mod store_impl {
     pub fn is_store_build() -> Result<bool, String> {
         Ok(false)
     }
 
     pub async fn purchase_plus_via_store() -> Result<bool, String> {
-        Err("Microsoft Store purchase is only available on Windows.".to_string())
+        Err("plus_not_available_on_macos: Plus subscription purchase is not yet available on macOS.".to_string())
+    }
+
+    pub async fn check_plus_store_license() -> Result<bool, String> {
+        Ok(false)
+    }
+}
+
+#[cfg(not(any(target_os = "windows", target_os = "macos")))]
+mod store_impl {
+    pub fn is_store_build() -> Result<bool, String> {
+        Ok(false)
+    }
+
+    pub async fn purchase_plus_via_store() -> Result<bool, String> {
+        Err("plus_not_available_on_platform: Plus subscription is not available on this platform.".to_string())
     }
 
     pub async fn check_plus_store_license() -> Result<bool, String> {

@@ -210,6 +210,7 @@ fn handle_binding_state(state: &Arc<HookSharedState>) {
             state.active.store(false, Ordering::SeqCst);
             let binding_label = state.binding_label.lock().unwrap().clone();
             send_shortcut_command(state, ShortcutCommand::Stop { binding_label });
+            state.pressed_keys.lock().unwrap().clear();
         }
         _ => {}
     }

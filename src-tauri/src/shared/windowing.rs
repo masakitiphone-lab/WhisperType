@@ -6,7 +6,7 @@ use windows::Win32::{
     UI::WindowsAndMessaging::{
         GetWindowLongPtrW, SetWindowLongPtrW, SetWindowPos, ShowWindow, GWL_EXSTYLE,
         HWND_TOPMOST, SHOW_WINDOW_CMD, SWP_NOMOVE, SWP_NOSIZE, SWP_NOACTIVATE,
-        WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW,
+        WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW, WS_EX_TRANSPARENT,
     },
 };
 
@@ -41,6 +41,8 @@ pub fn apply_overlay_visuals(window: &WebviewWindow) {
     let _ = window.set_background_color(Some(Color(0, 0, 0, 0)));
     #[cfg(target_os = "windows")]
     apply_windows_no_activate_style(window);
+    #[cfg(target_os = "windows")]
+    apply_windows_click_through(window);
 }
 
 pub fn show_window_without_focus(window: &WebviewWindow) {
@@ -93,6 +95,22 @@ fn apply_windows_no_activate_style(window: &WebviewWindow) {
         let hwnd = HWND(hwnd.0);
         let current_style = GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
         let next_style = current_style | WS_EX_NOACTIVATE.0 as isize | WS_EX_TOOLWINDOW.0 as isize;
+        if next_style != current_style {
+            let _ = SetWindowLongPtrW(hwnd, GWL_EXSTYLE, next_style);
+        }
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn apply_windows_click_through(window: &WebviewWindow) {
+    let Ok(hwnd) = window.hwnd() else {
+        return;
+    };
+
+    unsafe {
+        let hwnd = HWND(hwnd.0);
+        let current_style = GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
+        let next_style = current_style | WS_EX_TRANSPARENT.0 as isize;
         if next_style != current_style {
             let _ = SetWindowLongPtrW(hwnd, GWL_EXSTYLE, next_style);
         }

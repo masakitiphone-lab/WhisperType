@@ -10,6 +10,7 @@ mod tray;
 mod text_input;
 mod windowing;
 mod ms_store;
+mod accessibility;
 
 use tauri::{AppHandle, Emitter, Manager, UserAttentionType, WebviewUrl, WebviewWindowBuilder};
 use reqwest::multipart;
@@ -154,6 +155,52 @@ fn ensure_windows_autostart() -> Result<(), String> {
 
 #[cfg(not(target_os = "windows"))]
 fn ensure_windows_autostart() -> Result<(), String> {
+    Ok(())
+}
+
+#[cfg(target_os = "macos")]
+fn ensure_macos_autostart() -> Result<(), String> {
+    if cfg!(debug_assertions) {
+        return Ok(());
+    }
+
+    let exe_path = std::env::current_exe().map_err(|error| error.to_string())?;
+    let home = std::env::var("HOME").map_err(|_| "no_home_dir".to_string())?;
+    let plist_dir = std::path::Path::new(&home).join("Library").join("LaunchAgents");
+    std::fs::create_dir_all(&plist_dir).map_err(|error| error.to_string())?;
+
+    let plist_path = plist_dir.join("com.whispertype.app.plist");
+    let plist_content = format!(
+        r#"<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.whispertype.app</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>{}</string>
+        <string>--background</string>
+    </array>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <false/>
+    <key>ProcessType</key>
+    <string>Background</string>
+</dict>
+</plist>
+"#,
+        exe_path.display()
+    );
+
+    std::fs::write(&plist_path, plist_content).map_err(|error| error.to_string())?;
+    append_log_line(&format!("[macOS] LaunchAgent created at {}", plist_path.display()));
+    Ok(())
+}
+
+#[cfg(not(target_os = "macos"))]
+fn ensure_macos_autostart() -> Result<(), String> {
     Ok(())
 }
 
@@ -525,6 +572,8 @@ pub fn run() {
             overlay_window::get_overlay_layout_preferences,
             overlay_window::close_overlay_window,
             overlay_window::show_recording_window,
+            overlay_window::show_notice_window,
+            overlay_window::hide_notice_window,
             overlay_window::hide_recording_window,
             show_settings_window,
             type_text,
@@ -543,6 +592,8 @@ pub fn run() {
             is_store_build,
             purchase_plus_via_store,
             check_plus_store_license,
+            accessibility::get_accessibility_status,
+            accessibility::request_accessibility_permission_command,
         ])
         .setup(move |app| {
             // Setup tray
@@ -576,6 +627,7 @@ pub fn run() {
             overlay_window::ensure_overlay_window(app.handle(), false).ok();
 
             ensure_windows_autostart().ok();
+            ensure_macos_autostart().ok();
 
             let _ = startup_at;
             Ok(())

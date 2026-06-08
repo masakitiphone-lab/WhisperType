@@ -233,6 +233,11 @@ fn log_paste_target_state(state: PasteTargetState) {
 }
 
 pub fn type_text_internal(text: String, use_clipboard_paste: bool) -> Result<String, String> {
+    #[cfg(target_os = "macos")]
+    if use_clipboard_paste && !crate::accessibility::is_accessibility_trusted() {
+        return Err("accessibility_permission_required".to_string());
+    }
+
     use enigo::{
         Direction::{Click, Press, Release},
         Enigo, Key, Keyboard, Settings,
@@ -270,9 +275,10 @@ pub fn type_text_internal(text: String, use_clipboard_paste: bool) -> Result<Str
                     err
                 })?;
 
-                enigo.key(Key::Control, Press).map_err(|e| e.to_string())?;
+                let paste_mod = if cfg!(target_os = "macos") { Key::Meta } else { Key::Control };
+                enigo.key(paste_mod, Press).map_err(|e| e.to_string())?;
                 enigo.key(Key::Unicode('v'), Click).map_err(|e| e.to_string())?;
-                enigo.key(Key::Control, Release).map_err(|e| e.to_string())?;
+                enigo.key(paste_mod, Release).map_err(|e| e.to_string())?;
 
                 Ok(())
             })();

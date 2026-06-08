@@ -1,6 +1,6 @@
 # WhisperType
 
-WhisperType is a Windows-first Tauri desktop app for voice dictation.
+WhisperType is a cross-platform Tauri desktop app for voice dictation (Windows and macOS).
 
 ## What It Does
 
@@ -23,7 +23,8 @@ WhisperType is a Windows-first Tauri desktop app for voice dictation.
 - `pnpm tauri dev`
 - `corepack pnpm build`
 - `cargo check --manifest-path src-tauri/Cargo.toml`
-- `pnpm tauri build --bundles nsis`
+- `pnpm tauri build --bundles nsis`  (Windows)
+- `pnpm tauri build --bundles dmg`   (macOS)
 
 ## Docs
 

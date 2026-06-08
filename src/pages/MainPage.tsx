@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useRef, useState } from "react";
+﻿import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { emit, listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
 import { AppShell } from "@/components/AppShell";
@@ -115,24 +115,26 @@ export default function MainPage({
     void invoke<HotkeyBackendInfo>("get_hotkey_backend_info").then(setHotkeyBackendInfo).catch((err) => console.error("get_hotkey_backend_info failed:", err));
   }, []);
 
-  useEffect(() => {
+  const fetchRecentHistory = useCallback(async () => {
     if (!user) return;
 
-    const fetchRecentHistory = async () => {
-      const { data, error } = await supabase
-        .from("transcription_history")
-        .select("id, transcribed_text, created_at, credits_used")
-        .eq("user_id", user.id)
-        .order("created_at", { ascending: false })
-        .limit(5);
+    const { data, error } = await supabase
+      .from("transcription_history")
+      .select("id, transcribed_text, created_at, credits_used")
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: false })
+      .limit(5);
 
-      if (error) {
-        console.error("Error fetching recent history:", error);
-        return;
-      }
+    if (error) {
+      console.error("Error fetching recent history:", error);
+      return;
+    }
 
-      setRecentHistory((data ?? []) as RecentHistoryItem[]);
-    };
+    setRecentHistory((data ?? []) as RecentHistoryItem[]);
+  }, [user]);
+
+  useEffect(() => {
+    if (!user) return;
 
     void fetchRecentHistory();
 
@@ -147,7 +149,21 @@ export default function MainPage({
     return () => {
       unlistenFinished?.();
     };
-  }, [user]);
+  }, [user, fetchRecentHistory, refreshProfile]);
+
+  useEffect(() => {
+    if (!user) return;
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        void fetchRecentHistory();
+        void refreshProfile();
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
+  }, [user, fetchRecentHistory, refreshProfile]);
 
   useEffect(() => {
     const save = window.setTimeout(() => {

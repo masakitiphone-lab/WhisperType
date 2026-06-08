@@ -92,17 +92,27 @@ fn ffmpeg_candidates() -> Vec<PathBuf> {
 
     if let Ok(current_exe) = std::env::current_exe() {
         if let Some(exe_dir) = current_exe.parent() {
-            candidates.push(exe_dir.join("ffmpeg.exe"));
-            candidates.push(exe_dir.join("ffmpeg").join("ffmpeg.exe"));
-            candidates.push(exe_dir.join("resources").join("ffmpeg.exe"));
-            candidates.push(exe_dir.join("resources").join("ffmpeg").join("ffmpeg.exe"));
-            candidates.push(
-                exe_dir
-                    .join("resources")
-                    .join("ffmpeg")
-                    .join("bin")
-                    .join("ffmpeg.exe"),
-            );
+            #[cfg(target_os = "windows")]
+            {
+                candidates.push(exe_dir.join("ffmpeg.exe"));
+                candidates.push(exe_dir.join("ffmpeg").join("ffmpeg.exe"));
+                candidates.push(exe_dir.join("resources").join("ffmpeg.exe"));
+                candidates.push(exe_dir.join("resources").join("ffmpeg").join("ffmpeg.exe"));
+                candidates.push(
+                    exe_dir
+                        .join("resources")
+                        .join("ffmpeg")
+                        .join("bin")
+                        .join("ffmpeg.exe"),
+                );
+            }
+            #[cfg(not(target_os = "windows"))]
+            {
+                candidates.push(exe_dir.join("ffmpeg"));
+                candidates.push(exe_dir.join("ffmpeg").join("ffmpeg"));
+                candidates.push(exe_dir.join("resources").join("ffmpeg"));
+                candidates.push(exe_dir.join("Frameworks").join("ffmpeg"));
+            }
         }
     }
 
@@ -131,6 +141,17 @@ fn ffmpeg_candidates() -> Vec<PathBuf> {
                     }
                 }
             }
+        }
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        candidates.push(PathBuf::from("/usr/local/bin/ffmpeg"));
+        candidates.push(PathBuf::from("/opt/homebrew/bin/ffmpeg"));
+        candidates.push(PathBuf::from("/usr/bin/ffmpeg"));
+        if let Ok(home) = std::env::var("HOME") {
+            candidates.push(PathBuf::from(&home).join(".homebrew/bin/ffmpeg"));
+            candidates.push(PathBuf::from(&home).join("bin/ffmpeg"));
         }
     }
 

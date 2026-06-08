@@ -8,6 +8,10 @@ import { Card, CardContent } from "@/components/ui/card";
 import { useAuth } from "@/contexts/useAuth";
 import type { AppLocale } from "@/lib/appLocale";
 import {
+  getCheckoutProvider,
+  type CheckoutProvider,
+} from "@/lib/checkout";
+import {
   getStorePurchaseErrorMessage,
   readStoreBillingStatus,
   type StoreBillingStatus,
@@ -43,6 +47,7 @@ const COPY = {
       "Built for heavy daily use",
       "Cancel anytime from your Microsoft account",
     ],
+    macosNotAvailable: "Plus subscriptions are not yet available on macOS. Stay tuned.",
   },
   ja: {
     back: "戻る",
@@ -67,6 +72,7 @@ const COPY = {
       "毎日たっぷり使えます",
       "Microsoft アカウントからいつでも解約",
     ],
+    macosNotAvailable: "Plus サブスクリプションは macOS ではまだご利用いただけません。続報をお待ちください。",
   },
   es: {
     back: "Volver",
@@ -91,6 +97,7 @@ const COPY = {
       "Diseñado para uso diario intensivo",
       "Cancela cuando quieras desde tu cuenta Microsoft",
     ],
+    macosNotAvailable: "Las suscripciones Plus aún no están disponibles en macOS. Estén atentos.",
   },
 } as const;
 
@@ -102,6 +109,9 @@ export default function PlanCheckoutPage({ appLocale }: { appLocale: AppLocale }
   const [isPurchasing, setIsPurchasing] = useState(false);
   const [purchaseError, setPurchaseError] = useState("");
   const [isRefreshingLicense, setIsRefreshingLicense] = useState(false);
+  const [checkoutProvider, setCheckoutProvider] = useState<CheckoutProvider | null>(null);
+
+  const isMacOS = checkoutProvider === "macos-direct";
 
   const canPurchase = Boolean(
     billingStatus?.isStoreBuild &&
@@ -111,13 +121,18 @@ export default function PlanCheckoutPage({ appLocale }: { appLocale: AppLocale }
 
   const purchaseHint = useMemo(() => {
     if (!billingStatus) return "";
+    if (isMacOS) return copy.macosNotAvailable;
     if (!billingStatus.isStoreBuild) return copy.unavailable;
     if (!billingStatus.isProductConfigured) return copy.notConfigured;
     return "";
-  }, [billingStatus, copy.notConfigured, copy.unavailable]);
+  }, [billingStatus, copy, isMacOS]);
 
   const loadBillingStatus = async () => {
-    const status = await readStoreBillingStatus();
+    const [provider, status] = await Promise.all([
+      getCheckoutProvider(),
+      readStoreBillingStatus(),
+    ]);
+    setCheckoutProvider(provider);
     setBillingStatus(status);
     return status;
   };
@@ -161,7 +176,9 @@ export default function PlanCheckoutPage({ appLocale }: { appLocale: AppLocale }
           ? copy.notConfigured
           : code === "store_build_required"
             ? copy.unavailable
-            : copy.failed
+            : code === "plus_not_available_on_macos"
+              ? copy.macosNotAvailable
+              : copy.failed
       );
     } finally {
       setIsPurchasing(false);
@@ -233,51 +250,64 @@ export default function PlanCheckoutPage({ appLocale }: { appLocale: AppLocale }
 
             <section className="flex flex-col justify-center border-t border-black/6 bg-white p-7 dark:border-white/8 dark:bg-[#101116] lg:border-l lg:border-t-0 lg:p-9">
               <div className="rounded-[30px] border border-black/8 bg-white/82 p-6 shadow-[0_18px_52px_rgba(15,23,42,0.06)] dark:border-white/8 dark:bg-white/5">
-                <div className="flex items-start justify-between gap-5">
-                  <div>
-                    <div className="flex items-center gap-2 text-sm font-semibold text-slate-900 dark:text-slate-100">
-                      <Store className="h-4 w-4 text-slate-500" />
-                      Microsoft Store
+                {!isMacOS ? (
+                  <>
+                    <div className="flex items-start justify-between gap-5">
+                      <div>
+                        <div className="flex items-center gap-2 text-sm font-semibold text-slate-900 dark:text-slate-100">
+                          <Store className="h-4 w-4 text-slate-500" />
+                          Microsoft Store
+                        </div>
+                        <p className="mt-3 text-sm leading-6 text-slate-600 dark:text-slate-300">{copy.storeNote}</p>
+                      </div>
+                      <div className="shrink-0 rounded-2xl bg-slate-50 px-4 py-3 text-right dark:bg-white/8">
+                        <p className="text-xs font-medium text-slate-500 dark:text-slate-400">Plus</p>
+                        <p className="mt-1 text-lg font-semibold text-slate-950 dark:text-white">{copy.price}</p>
+                      </div>
                     </div>
-                    <p className="mt-3 text-sm leading-6 text-slate-600 dark:text-slate-300">{copy.storeNote}</p>
+
+                    <div className="mt-6 rounded-[24px] border border-black/6 bg-slate-50/82 p-4 dark:border-white/8 dark:bg-black/18">
+                      <Button
+                        type="button"
+                        disabled={isPurchasing || !canPurchase}
+                        onClick={handleStorePurchase}
+                        className="h-12 w-full rounded-2xl bg-slate-950 text-base font-semibold text-white shadow-[0_12px_28px_rgba(15,23,42,0.20)] hover:bg-slate-800 disabled:bg-slate-400 disabled:text-white dark:bg-white dark:text-slate-950 dark:hover:bg-slate-100 dark:disabled:bg-white/30 dark:disabled:text-white/70"
+                      >
+                        {isPurchasing ? copy.pending : copy.cta}
+                      </Button>
+
+                      {purchaseError ? <p className="mt-3 text-xs text-rose-600 dark:text-rose-300">{purchaseError}</p> : null}
+                      {!purchaseError && purchaseHint ? <p className="mt-3 text-xs text-slate-500 dark:text-slate-400">{purchaseHint}</p> : null}
+                    </div>
+
+                    <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-black/6 pt-4 dark:border-white/8">
+                      <span
+                        className={`text-sm font-medium ${
+                          billingStatus?.hasLicense
+                            ? "text-emerald-700 dark:text-emerald-300"
+                            : "text-slate-600 dark:text-slate-300"
+                        }`}
+                      >
+                        {billingStatus?.hasLicense ? copy.active : copy.inactive}
+                      </span>
+                      <Button type="button" variant="outline" size="sm" onClick={() => void refreshLicense()} disabled={isRefreshingLicense}>
+                        <RefreshCw className={`h-4 w-4 ${isRefreshingLicense ? "animate-spin" : ""}`} />
+                        {copy.refresh}
+                      </Button>
+                    </div>
+
+                    <p className="mt-4 text-xs leading-5 text-slate-500 dark:text-slate-400">{copy.privacyNote}</p>
+                  </>
+                ) : (
+                  <div className="flex flex-col items-center justify-center py-10 text-center">
+                    <div className="mb-4 rounded-full bg-slate-100 p-4 dark:bg-white/10">
+                      <Sparkles className="h-8 w-8 text-slate-400 dark:text-slate-500" />
+                    </div>
+                    <p className="text-sm font-medium text-slate-700 dark:text-slate-200">
+                      {copy.macosNotAvailable}
+                    </p>
                   </div>
-                  <div className="shrink-0 rounded-2xl bg-slate-50 px-4 py-3 text-right dark:bg-white/8">
-                    <p className="text-xs font-medium text-slate-500 dark:text-slate-400">Plus</p>
-                    <p className="mt-1 text-lg font-semibold text-slate-950 dark:text-white">{copy.price}</p>
-                  </div>
-                </div>
-
-                <div className="mt-6 rounded-[24px] border border-black/6 bg-slate-50/82 p-4 dark:border-white/8 dark:bg-black/18">
-                  <Button
-                    type="button"
-                    disabled={isPurchasing || !canPurchase}
-                    onClick={handleStorePurchase}
-                    className="h-12 w-full rounded-2xl bg-slate-950 text-base font-semibold text-white shadow-[0_12px_28px_rgba(15,23,42,0.20)] hover:bg-slate-800 disabled:bg-slate-400 disabled:text-white dark:bg-white dark:text-slate-950 dark:hover:bg-slate-100 dark:disabled:bg-white/30 dark:disabled:text-white/70"
-                  >
-                    {isPurchasing ? copy.pending : copy.cta}
-                  </Button>
-
-                  {purchaseError ? <p className="mt-3 text-xs text-rose-600 dark:text-rose-300">{purchaseError}</p> : null}
-                  {!purchaseError && purchaseHint ? <p className="mt-3 text-xs text-slate-500 dark:text-slate-400">{purchaseHint}</p> : null}
-                </div>
-
-                <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-black/6 pt-4 dark:border-white/8">
-                  <span
-                    className={`text-sm font-medium ${
-                      billingStatus?.hasLicense
-                        ? "text-emerald-700 dark:text-emerald-300"
-                        : "text-slate-600 dark:text-slate-300"
-                    }`}
-                  >
-                    {billingStatus?.hasLicense ? copy.active : copy.inactive}
-                  </span>
-                  <Button type="button" variant="outline" size="sm" onClick={() => void refreshLicense()} disabled={isRefreshingLicense}>
-                    <RefreshCw className={`h-4 w-4 ${isRefreshingLicense ? "animate-spin" : ""}`} />
-                    {copy.refresh}
-                  </Button>
-                </div>
-
-                <p className="mt-4 text-xs leading-5 text-slate-500 dark:text-slate-400">{copy.privacyNote}</p>
+                )}
               </div>
             </section>
           </CardContent>

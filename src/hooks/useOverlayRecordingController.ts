@@ -22,9 +22,6 @@ import {
   CAPSULE_EXPAND_DURATION,
   getOverlayCapsuleStageHeight,
   getOverlayCapsuleStageWidth,
-  getOverlayNoticeContentHeight,
-  getOverlayNoticeStageHeight,
-  getOverlayNoticeStageWidth,
 } from "@/lib/overlayLayout";
 import { readOverlayLayoutPreferences, resizeOverlayWindowForPreferences, type OverlayLayoutPreferences } from "@/lib/overlayLayoutPreferences";
 
@@ -83,22 +80,20 @@ export function useOverlayRecordingController() {
   const clearOverlayNotice = async (immediate = false) => {
     if (noticeDismissTimeoutRef.current) window.clearTimeout(noticeDismissTimeoutRef.current);
     noticeDismissTimeoutRef.current = null;
-    if (immediate) {
-      setOverlayNotice(null);
-      setIsOverlayVisible(false);
-      await invoke("hide_overlay_window");
-      return;
-    }
-    setIsOverlayVisible(false);
     const hideGeneration = overlayGenerationRef.current;
-    noticeDismissTimeoutRef.current = window.setTimeout(async () => {
+    const doHide = async () => {
       if (!overlayGenerationIsCurrent(hideGeneration)) {
         return;
       }
       setOverlayNotice(null);
-      await invoke("hide_overlay_window");
+      await invoke("hide_notice_window");
       noticeDismissTimeoutRef.current = null;
-    }, shouldReduceMotion ? 80 : 180);
+    };
+    if (immediate) {
+      await doHide();
+      return;
+    }
+    noticeDismissTimeoutRef.current = window.setTimeout(doHide, shouldReduceMotion ? 80 : 180);
   };
   const openAppFromOverlay = async () => invoke("show_settings_window");
   const showOverlayNotice = async (payload: OverlayNoticePayload) => {
@@ -114,7 +109,13 @@ export function useOverlayRecordingController() {
     updateCapsulePhase("idle");
     setOverlayNotice(buildOverlayNotice(appLocaleRef.current, payload));
     updateState("idle");
-    setIsOverlayVisible(true);
+    await invoke("show_notice_window", {
+      kind: payload.kind,
+      code: payload.code,
+      detail: payload.detail ?? null,
+      text: payload.text ?? null,
+      locale: appLocaleRef.current,
+    });
   };
   const beginTranscriptionTransition = () => {
     if (finishTimeoutRef.current) window.clearTimeout(finishTimeoutRef.current);
@@ -125,8 +126,8 @@ export function useOverlayRecordingController() {
     setSpinnerPhase("visible");
     updateState("transcribing");
   };
-  const stageWidth = overlayNotice ? getOverlayNoticeStageWidth(overlayNotice.width) : getOverlayCapsuleStageWidth();
-  const stageHeight = overlayNotice ? getOverlayNoticeStageHeight(getOverlayNoticeContentHeight(overlayNotice)) : getOverlayCapsuleStageHeight();
+  const stageWidth = getOverlayCapsuleStageWidth();
+  const stageHeight = getOverlayCapsuleStageHeight();
   stageWidthRef.current = stageWidth;
   stageHeightRef.current = stageHeight;
   useEffect(() => {
@@ -275,6 +276,7 @@ export function useOverlayRecordingController() {
         const text = await transcribeAudio(transcribableBlob);
         transcriptionProgress.complete();
         queueTranscriptionPaste(pendingPasteTextRef, text);
+        void invoke("emit_transcription_finished").catch(() => {});
         void prefetchTranscriptionReadiness().catch((err) => {
           console.warn("Post-transcription prefetch failed:", err);
         });

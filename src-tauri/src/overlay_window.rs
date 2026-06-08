@@ -3,8 +3,9 @@ use std::{
     time::{Duration, Instant},
 };
 
+use serde::{Deserialize, Serialize};
 use tauri::{
-    webview::Color, AppHandle, Manager, WebviewUrl, WebviewWindowBuilder,
+    webview::Color, AppHandle, Emitter, Manager, WebviewUrl, WebviewWindowBuilder,
 };
 
 use crate::{
@@ -16,6 +17,15 @@ use crate::{
     },
     AppState,
 };
+
+#[derive(Clone, Serialize, Deserialize)]
+pub(crate) struct NoticePayload {
+    pub(crate) kind: String,
+    pub(crate) code: String,
+    pub(crate) detail: Option<String>,
+    pub(crate) text: Option<String>,
+    pub(crate) locale: String,
+}
 
 #[derive(Clone, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -260,6 +270,55 @@ pub(crate) fn close_overlay_window(app: AppHandle) -> Result<(), String> {
 #[tauri::command]
 pub(crate) fn hide_recording_window(app: AppHandle) -> Result<(), String> {
     if let Some(window) = app.get_webview_window("overlay") {
+        let _ = window.hide();
+    }
+    Ok(())
+}
+
+fn ensure_notice_window(app: &AppHandle) -> Result<tauri::WebviewWindow, String> {
+    if let Some(window) = app.get_webview_window("notice") {
+        return Ok(window);
+    }
+    let window = WebviewWindowBuilder::new(app, "notice", WebviewUrl::App("notice.html".into()))
+        .decorations(false)
+        .always_on_top(true)
+        .skip_taskbar(true)
+        .resizable(false)
+        .transparent(true)
+        .background_color(Color(0, 0, 0, 0))
+        .inner_size(300.0, 200.0)
+        .visible(false)
+        .build()
+        .map_err(|e| e.to_string())?;
+    show_window_without_focus(&window);
+    Ok(window)
+}
+
+#[tauri::command]
+pub(crate) fn show_notice_window(app: AppHandle, payload: NoticePayload) -> Result<(), String> {
+    let window = ensure_notice_window(&app)?;
+
+    // Position near the overlay window
+    if let Some(overlay) = app.get_webview_window("overlay") {
+        if let Ok(overlay_pos) = overlay.outer_position() {
+            let pos = overlay_pos;
+            let notice_width = 300.0;
+            let notice_height = 200.0;
+            let overlay_width = overlay.inner_size().map(|s| s.width as f64).unwrap_or(200.0);
+            let x = ((pos.x as f64).max(0.0) + (overlay_width - notice_width) / 2.0).max(0.0);
+            let y = ((pos.y as f64) - notice_height - 10.0).max(0.0);
+            let _ = window.set_position(tauri::Position::Logical(tauri::LogicalPosition { x, y }));
+        }
+    }
+
+    show_window_without_focus(&window);
+    let _ = app.emit_to("notice", "show-notice", &payload);
+    Ok(())
+}
+
+#[tauri::command]
+pub(crate) fn hide_notice_window(app: AppHandle) -> Result<(), String> {
+    if let Some(window) = app.get_webview_window("notice") {
         let _ = window.hide();
     }
     Ok(())

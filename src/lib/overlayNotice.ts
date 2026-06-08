@@ -9,6 +9,7 @@ export type OverlayNoticePayload = {
 
 export type OverlayNoticeViewModel = {
   kind: "error" | "manual_copy";
+  code: string;
   badgeLabel: string;
   title: string;
   message: string;
@@ -28,8 +29,8 @@ type NoticeCopy = {
 };
 
 const NOTICE_WIDTH = 268;
-const ERROR_HEIGHT = 104;
-const MANUAL_COPY_HEIGHT = 136;
+const ERROR_HEIGHT = 100;
+const MANUAL_COPY_HEIGHT = 124;
 
 export function classifyOverlayError(errorMessage: string): OverlayNoticePayload {
   const normalized = errorMessage.toLowerCase();
@@ -62,8 +63,9 @@ export function buildOverlayNotice(locale: AppLocale, payload: OverlayNoticePayl
     const copy = getManualCopyNotice(locale, payload.code);
     return {
       kind: "manual_copy",
+      code: payload.code,
       badgeLabel: labels.copyNeeded,
-      title: copy.title,
+      title: "",
       message: copy.message,
       text: payload.text ?? "",
       openLabel: labels.open,
@@ -78,6 +80,7 @@ export function buildOverlayNotice(locale: AppLocale, payload: OverlayNoticePayl
   const copy = getErrorNotice(locale, payload.code);
   return {
     kind: "error",
+    code: payload.code,
     badgeLabel: labels.notice,
     title: copy.title,
     message: copy.message,
@@ -121,25 +124,23 @@ function getOverlayLabels(locale: AppLocale) {
 
 function getManualCopyNotice(locale: AppLocale, code: string): NoticeCopy {
   const isPasteTargetMissing = code === "paste_target_not_selected";
+  const isAccessibilityRequired = code === "accessibility_permission_required";
 
   if (locale === "ja") {
-    return {
-      title: isPasteTargetMissing ? "入力先を確認" : "貼り付けを確認",
-      message: "必要なら下の文面をコピーしてください。",
-    };
+    if (isAccessibilityRequired) return { title: "", message: "アクセシビリティ許可をシステム設定で有効にしてください" };
+    if (isPasteTargetMissing) return { title: "", message: "入力フィールドを選んでください" };
+    return { title: "", message: "下の文面をコピーしてお使いください" };
   }
 
   if (locale === "es") {
-    return {
-      title: isPasteTargetMissing ? "Revisa el destino" : "Revisa el pegado",
-      message: "Copia el texto si hace falta.",
-    };
+    if (isAccessibilityRequired) return { title: "", message: "Habilita el permiso de accesibilidad en Configuración" };
+    if (isPasteTargetMissing) return { title: "", message: "Selecciona un campo de texto" };
+    return { title: "", message: "Copia el texto de abajo" };
   }
 
-  return {
-    title: isPasteTargetMissing ? "Check the target" : "Check the paste",
-    message: "Copy the text if needed.",
-  };
+  if (isAccessibilityRequired) return { title: "", message: "Enable Accessibility permission in System Settings" };
+  if (isPasteTargetMissing) return { title: "", message: "Select a text field first" };
+  return { title: "", message: "Copy the text below" };
 }
 
 function getErrorNotice(locale: AppLocale, code: string): NoticeCopy {

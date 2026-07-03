@@ -13,6 +13,7 @@ type ShowNoticeEvent = OverlayNoticePayload & { locale: string };
 function NoticePage() {
   const [notice, setNotice] = React.useState<OverlayNoticeViewModel | null>(null);
   const [reduceMotion, setReduceMotion] = React.useState(false);
+  const contentRef = React.useRef<HTMLDivElement>(null);
 
   React.useEffect(() => {
     let unlisten: (() => void) | undefined;
@@ -23,6 +24,20 @@ function NoticePage() {
     }).then((fn) => { unlisten = fn; });
     return () => unlisten?.();
   }, []);
+
+  React.useEffect(() => {
+    if (!notice || !contentRef.current) return;
+    const raf = requestAnimationFrame(() => {
+      if (!contentRef.current) return;
+      const rect = contentRef.current.getBoundingClientRect();
+      const padding = 12;
+      void invoke("resize_notice_window", {
+        width: Math.ceil(rect.width + padding),
+        height: Math.ceil(rect.height + padding),
+      });
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [notice]);
 
   const clear = () => {
     setNotice(null);
@@ -42,7 +57,7 @@ function NoticePage() {
         background: "transparent",
       }}
     >
-      <div style={{ width: `${notice.width}px` }}>
+      <div ref={contentRef} style={{ width: `${notice.width}px` }}>
         <OverlayNoticePanel
           notice={notice}
           reduceMotion={reduceMotion}

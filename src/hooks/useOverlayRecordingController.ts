@@ -86,7 +86,7 @@ export function useOverlayRecordingController() {
         return;
       }
       setOverlayNotice(null);
-      await invoke("hide_notice_window");
+      await invoke("hide_notice_window").catch((err) => console.error("hide_notice_window failed:", err));
       noticeDismissTimeoutRef.current = null;
     };
     if (immediate) {
@@ -231,6 +231,7 @@ export function useOverlayRecordingController() {
           setCapsuleMounted(false);
           setSpinnerPhase("hidden");
           await invoke("hide_overlay_window");
+          await invoke("hide_notice_window").catch(() => {});
         }, shouldReduceMotion ? 220 : CAPSULE_COLLAPSE_DURATION * 1000 + 160);
       }, shouldReduceMotion ? 180 : CAPSULE_COLLAPSE_DURATION * 1000);
     };

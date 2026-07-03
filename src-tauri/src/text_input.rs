@@ -1,4 +1,4 @@
-use crate::log_store::append_log_line;
+use crate::shared::log::append_log_line;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 
@@ -316,6 +316,19 @@ pub fn type_text_internal(text: String, use_clipboard_paste: bool) -> Result<Str
             PasteTargetState::Yes => "paste_sent",
         }
         .to_string());
+    }
+
+    for ch in text.chars() {
+        let key = match ch {
+            '\n' | '\r' => Key::Return,
+            '\t' => Key::Tab,
+            _ => Key::Unicode(ch),
+        };
+        enigo.key(key, Click).map_err(|e| {
+            let err = e.to_string();
+            append_log_line(&format!("[Rust] enigo typing error: {}", err));
+            err
+        })?;
     }
 
     Ok("typed".to_string())

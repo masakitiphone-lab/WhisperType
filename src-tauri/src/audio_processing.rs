@@ -6,7 +6,7 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
-use crate::log_store::append_log_line;
+use crate::shared::log::append_log_line;
 use webrtc_vad::{SampleRate, Vad, VadMode};
 
 #[cfg(target_os = "windows")]
@@ -280,15 +280,55 @@ fn detect_speech_frames(
     })
 }
 
+fn ffmpeg_available() -> bool {
+    let program = resolve_ffmpeg_executable();
+    let path = PathBuf::from(&program);
+    if path.exists() {
+        return true;
+    }
+    if program == OsString::from("ffmpeg") {
+        return false;
+    }
+    false
+}
+
 #[tauri::command]
 pub fn detect_speech_with_vad(bytes: Vec<u8>) -> Result<VadDetectionResult, String> {
-    let (_, _temp_files, samples, sample_rate_hz) = decode_webm_to_pcm_wav(&bytes)?;
+    if !ffmpeg_available() {
+        append_log_line("[FFmpeg] not found; skipping VAD pre-check (assuming speech present)");
+        return Ok(VadDetectionResult {
+            has_speech: true,
+            total_frames: 1,
+            speech_frames: 1,
+        });
+    }
+    let (_, _temp_files, samples, sample_rate_hz) = match decode_webm_to_pcm_wav(&bytes) {
+        Ok(result) => result,
+        Err(error) => {
+            append_log_line(&format!("[FFmpeg] VAD decode failed ({}); assuming speech present", error));
+            return Ok(VadDetectionResult {
+                has_speech: true,
+                total_frames: 1,
+                speech_frames: 1,
+            });
+        }
+    };
     detect_speech_frames(&samples, sample_rate_hz, API_GATE_VAD_MIN_SPEECH_FRAMES)
 }
 
 #[tauri::command]
 pub fn process_audio_with_ffmpeg(bytes: Vec<u8>) -> Result<Vec<u8>, String> {
-    let (input_path, mut temp_files, samples, sample_rate_hz) = decode_webm_to_pcm_wav(&bytes)?;
+    if !ffmpeg_available() {
+        append_log_line("[FFmpeg] not found; returning original audio for transcription");
+        return Ok(bytes);
+    }
+    let (input_path, mut temp_files, samples, sample_rate_hz) = match decode_webm_to_pcm_wav(&bytes) {
+        Ok(result) => result,
+        Err(error) => {
+            append_log_line(&format!("[FFmpeg] decode failed ({}); returning original audio", error));
+            return Ok(bytes);
+        }
+    };
     if samples.is_empty() {
         append_log_line("[FFmpeg] decoded audio was empty; using original recording");
         return Ok(bytes);

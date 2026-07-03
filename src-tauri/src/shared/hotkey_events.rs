@@ -19,3 +19,7 @@ pub fn emit_transcription_started(app: &AppHandle) {
 pub fn emit_transcription_finished(app: &AppHandle) {
     let _ = app.emit("transcription-finished", ());
 }
+
+pub fn emit_recording_failed(app: &AppHandle) {
+    let _ = app.emit("recording-failed", ());
+}

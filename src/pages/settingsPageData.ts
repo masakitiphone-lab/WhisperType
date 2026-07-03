@@ -73,6 +73,9 @@ export type UiCopyKey =
   | "probeNative"
   | "copyDiagnostics"
   | "clearDiagnostics"
+  | "recentLogsTitle"
+  | "recentLogsDescription"
+  | "clearLogs"
   | "clearPrompt"
   | "presetJapanese"
   | "presetEnglish"
@@ -118,6 +121,9 @@ const EN: UiCopy = {
   probeNative: "Probe native backend",
   copyDiagnostics: "Copy diagnostics",
   clearDiagnostics: "Clear",
+  recentLogsTitle: "Recent logs",
+  recentLogsDescription: "Latest transcription and app events from this session.",
+  clearLogs: "Clear logs",
   clearPrompt: "Clear",
   presetJapanese: "Japanese preset",
   presetEnglish: "English preset",
@@ -162,6 +168,9 @@ const JA: UiCopy = {
   probeNative: "ネイティブバックエンドを確認",
   copyDiagnostics: "診断情報をコピー",
   clearDiagnostics: "クリア",
+  recentLogsTitle: "直近ログ",
+  recentLogsDescription: "このセッションの最新イベントです。",
+  clearLogs: "ログをクリア",
   clearPrompt: "クリア",
   presetJapanese: "日本語プリセット",
   presetEnglish: "英語プリセット",
@@ -206,6 +215,9 @@ const ES: UiCopy = {
   probeNative: "Comprobar backend nativo",
   copyDiagnostics: "Copiar diagnóstico",
   clearDiagnostics: "Limpiar",
+  recentLogsTitle: "Registros recientes",
+  recentLogsDescription: "Eventos recientes de la sesión actual.",
+  clearLogs: "Borrar registros",
   clearPrompt: "Limpiar",
   presetJapanese: "Preajuste japonés",
   presetEnglish: "Preajuste inglés",

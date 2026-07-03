@@ -1,4 +1,5 @@
-import type { Dispatch, ReactNode, SetStateAction } from "react";
+import { useEffect, useState, type Dispatch, type ReactNode, type SetStateAction } from "react";
+import { invoke } from "@tauri-apps/api/core";
 import { Check, ChevronDown, Mic, Play, SlidersHorizontal, Square, Trash2 } from "lucide-react";
 import { HotkeyRecorder } from "@/components/HotkeyRecorder";
 import { Button } from "@/components/ui/button";
@@ -74,6 +75,29 @@ export function MainPageSettingsSection({
 }: MainPageSettingsSectionProps) {
   const micTestLevelBars = 44;
   const micTestActiveBars = Math.round(micTestLevel * micTestLevelBars);
+  const [recentLogs, setRecentLogs] = useState<string[]>([]);
+
+  useEffect(() => {
+    let active = true;
+    const refreshLogs = async () => {
+      try {
+        const logs = await invoke<string[]>("get_recent_logs");
+        if (active) setRecentLogs(Array.isArray(logs) ? logs : []);
+      } catch {
+        if (active) setRecentLogs([]);
+      }
+    };
+
+    void refreshLogs();
+    const interval = window.setInterval(() => {
+      void refreshLogs();
+    }, 2000);
+
+    return () => {
+      active = false;
+      window.clearInterval(interval);
+    };
+  }, []);
 
   return (
     <section ref={setSectionRef} id="settings" className="scroll-mt-8">
@@ -222,6 +246,37 @@ export function MainPageSettingsSection({
               <Button type="button" variant="outline" size="sm" onClick={() => setSettings((current) => ({ ...current, prompt: ENGLISH_TRANSCRIPTION_PROMPT }))}>
                 EN
               </Button>
+            </div>
+          </div>
+
+          <div className={GLASS_PANEL + " p-4"}>
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">{ui.recentLogsTitle}</p>
+                <p className="mt-1 text-xs leading-5 text-slate-500 dark:text-slate-400">{ui.recentLogsDescription}</p>
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={async () => {
+                  await invoke("clear_recent_logs").catch(() => {});
+                  setRecentLogs([]);
+                }}
+              >
+                {ui.clearLogs}
+              </Button>
+            </div>
+            <div className="mt-4 max-h-60 space-y-2 overflow-auto rounded-[18px] border border-black/6 bg-white/70 p-3 text-xs leading-5 text-slate-700 shadow-[inset_0_1px_0_rgba(255,255,255,0.8)] dark:border-white/8 dark:bg-white/4 dark:text-slate-200">
+              {recentLogs.length > 0 ? (
+                recentLogs.map((line, index) => (
+                  <div key={`${index}-${line}`} className="whitespace-pre-wrap break-words">
+                    {line}
+                  </div>
+                ))
+              ) : (
+                <p className="text-slate-400 dark:text-slate-500">{appLocale === "ja" ? "まだログはありません。" : "No logs yet."}</p>
+              )}
             </div>
           </div>
 

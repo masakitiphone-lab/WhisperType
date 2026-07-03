@@ -8,7 +8,7 @@ import { normalizeHotkeyForDisplay, normalizeHotkeyForNative } from "@/lib/hotke
 import { DEFAULT_APP_SETTINGS, readAppSettings, writeAppSettings, type AppSettings } from "@/lib/appSettings";
 import { getOverlayCapsuleStageHeight, getOverlayCapsuleStageWidth } from "@/lib/overlayLayout";
 import { resizeOverlayWindowForPreferences, selectOverlayLayoutPreferences, setNativeOverlayLayoutPreferences } from "@/lib/overlayLayoutPreferences";
-import { readOverlayScale } from "@/lib/uiPreferences";
+import { readAppOverlayScale } from "@/lib/appSettings";
 import { requestPreferredAudioStream } from "@/lib/audioCapture";
 import { supabase } from "@/lib/supabase";
 import { DEFAULT_HOTKEY, LANGUAGE_OPTIONS, MODEL_OPTIONS, getUiCopy, type HotkeyBackendInfo } from "@/pages/settingsPageData";
@@ -43,7 +43,7 @@ export default function MainPage({
   const [settings, setSettings] = useState<AppSettings>({
     ...DEFAULT_APP_SETTINGS,
     hotkey: DEFAULT_HOTKEY,
-    overlayScale: readOverlayScale(),
+    overlayScale: readAppOverlayScale(),
   });
   const [hotkeyStatusMessage, setHotkeyStatusMessage] = useState("");
   const [hotkeyBackendInfo, setHotkeyBackendInfo] = useState<HotkeyBackendInfo | null>(null);
@@ -77,7 +77,7 @@ export default function MainPage({
       ...DEFAULT_APP_SETTINGS,
       ...parsed,
       hotkey: normalizeHotkeyForDisplay(parsed.hotkey || DEFAULT_HOTKEY),
-      overlayScale: parsed.overlayScale ?? readOverlayScale(),
+      overlayScale: parsed.overlayScale ?? readAppOverlayScale(),
     });
     setHotkey(normalizeHotkeyForDisplay(parsed.hotkey || DEFAULT_HOTKEY));
   }, []);

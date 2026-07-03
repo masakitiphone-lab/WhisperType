@@ -30,7 +30,7 @@ Core flow:
 ## Current Release Rules
 
 - Production browser redirect / landing page after Google login:
-  - URL: `http://retirecurl.app`
+  - URL: `https://studio-mirai.vercel.app/whispertype/redirect/`
   - Use a browser page that tells the user they can return to the app and close the page.
   - This is separate from the desktop deep-link callback.
 - Microsoft Store Plus purchase:
@@ -104,11 +104,11 @@ Notes:
 Development URLs:
 - App URL: `http://localhost:1420`
 - Desktop callback: `whispertype://auth/callback`
-- Browser landing page after Google login: `http://retirecurl.app`
+- Browser landing page after Google login: `https://studio-mirai.vercel.app/whispertype/redirect/`
 
 Supabase redirect allow-list should include:
 - `whispertype://auth/callback`
-- `http://retirecurl.app`
+- `https://studio-mirai.vercel.app/whispertype/redirect/`
 - `http://localhost:1420/auth/callback` only if you want a browser fallback page during local testing
 
 ## Database Assumptions

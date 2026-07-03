@@ -151,3 +151,16 @@ export function writeAppSettings(nextSettings: Partial<AppSettings>) {
     }),
   );
 }
+
+export const DEFAULT_OVERLAY_SCALE = 1;
+
+export function readAppOverlayScale() {
+  const value = readAppSettings().overlayScale ?? DEFAULT_OVERLAY_SCALE;
+  return Math.min(2, Math.max(0.8, value));
+}
+
+export function writeAppOverlayScale(scale: number) {
+  writeAppSettings({
+    overlayScale: Math.min(2, Math.max(0.8, scale)),
+  });
+}

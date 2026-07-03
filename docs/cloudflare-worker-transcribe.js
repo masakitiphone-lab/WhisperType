@@ -206,10 +206,14 @@ export default {
       const gatewayId = env.CF_AI_GATEWAY_ID;
       const gatewayToken = env.CF_AIG_TOKEN || "";
       const groqApiKey = env.GROQ_API_KEY || "";
-      const useDirectGroq = !gatewayAccountId || !gatewayId;
+      const useDirectGroq = Boolean(groqApiKey);
 
       if (useDirectGroq && !groqApiKey) {
         throw new Error("server_misconfigured: missing_groq_api_key");
+      }
+
+      if (!useDirectGroq && (!gatewayAccountId || !gatewayId)) {
+        throw new Error("server_misconfigured: missing_groq_gateway_config");
       }
 
       const groqFormData = new FormData();

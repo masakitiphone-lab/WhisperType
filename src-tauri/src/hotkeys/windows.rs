@@ -147,7 +147,15 @@ fn start_raw_input_thread(state: Arc<HookSharedState>) {
         append_log_line("[Shortcut] Windows raw input backend registered");
 
         let mut message = MSG::default();
-        while GetMessageW(&mut message, None, 0, 0).into() {
+        while {
+            let result = GetMessageW(&mut message, None, 0, 0);
+            if result.0 == -1 {
+                append_log_line("[Shortcut] GetMessageW error (-1); raw input loop exiting");
+                false
+            } else {
+                result.into()
+            }
+        } {
             let _ = TranslateMessage(&message);
             DispatchMessageW(&message);
         }

@@ -3,12 +3,10 @@
 mod hotkeys;
 mod audio_processing;
 mod shared;
-mod log_store;
 pub(crate) mod overlay_window;
 mod secure_storage;
 mod tray;
 mod text_input;
-mod windowing;
 mod ms_store;
 mod accessibility;
 
@@ -24,19 +22,22 @@ use hotkeys::{
 use tauri_plugin_deep_link::DeepLinkExt;
 use reqwest::Url;
 use text_input::type_text_internal;
-use log_store::append_log_line;
+use shared::log::append_log_line;
 use audio_processing::{detect_speech_with_vad, process_audio_with_ffmpeg};
 use tray::setup_tray_clean;
 use overlay_window::OverlayLayoutPreferences;
-use windowing::configure_main_window_for_settings;
+use shared::windowing::configure_main_window_for_settings;
 use shared::hotkey_events::{
-    emit_recording_started, emit_recording_stopped, emit_transcription_finished as emit_transcription_finished_event,
+    emit_recording_failed, emit_recording_started, emit_recording_stopped,
+    emit_transcription_finished as emit_transcription_finished_event,
     emit_transcription_prefetch, emit_transcription_started,
 };
+use shared::log::{clear_recent_log_lines, recent_log_lines};
 
 use std::{sync::Mutex, time::Instant};
 #[cfg(target_os = "windows")]
 use std::process::Command;
+use std::sync::{atomic::AtomicBool, Arc};
 use ms_store::{check_plus_store_license, get_checkout_provider, is_store_build, purchase_plus_via_store};
 use secure_storage::{secure_storage_delete, secure_storage_get, secure_storage_set};
 
@@ -57,6 +58,7 @@ struct AppState {
     overlay_ready: Mutex<bool>,
     overlay_last_seen: Mutex<Option<Instant>>,
     overlay_layout_preferences: Mutex<OverlayLayoutPreferences>,
+    overlay_retry_abort: Mutex<Option<Arc<AtomicBool>>>,
 }
 
 
@@ -231,10 +233,9 @@ fn stop_recording(app: AppHandle) -> Result<(), String> {
 pub(crate) fn start_recording_internal(app: &AppHandle, source: &str) -> Result<bool, String> {
     if let Ok(cached_access_token) = app.state::<AppState>().cached_access_token.lock() {
         if cached_access_token.is_none() {
-            append_log_line("[Shortcut] rejected: no cached access token (user not signed in)");
+            append_log_line("[Shortcut] no cached access token; prompting auth via main window");
             restore_main_window(app);
             app.emit("auth-required", ()).ok();
-            return Err("auth_required".to_string());
         }
     }
 
@@ -252,6 +253,8 @@ pub(crate) fn start_recording_internal(app: &AppHandle, source: &str) -> Result<
         let mut recording = state.recording.lock().map_err(|e| e.to_string())?;
         recording.is_recording = false;
         recording.is_transcribing = false;
+        append_log_line(&format!("[Shortcut] recording failed: {}", error));
+        emit_recording_failed(app);
         return Err(error);
     }
 
@@ -287,10 +290,7 @@ fn start_transcription(app: AppHandle) -> Result<(), String> {
 fn finish_transcription(app: AppHandle) -> Result<(), String> {
     let state = app.state::<AppState>();
     let mut recording = state.recording.lock().map_err(|e| e.to_string())?;
-    recording.is_recording = false;
     recording.is_transcribing = false;
-    drop(recording);
-    let _ = emit_transcription_finished(app);
     Ok(())
 }
 
@@ -433,7 +433,10 @@ async fn transcribe_request(
     model: String,
     prompt: Option<String>,
 ) -> Result<String, String> {
-    let client = reqwest::Client::new();
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(30))
+        .build()
+        .map_err(|error| error.to_string())?;
     let endpoint_url = validate_transcribe_endpoint(&endpoint)?;
     let file_size = file_bytes.len();
     let has_language = language
@@ -473,6 +476,11 @@ async fn transcribe_request(
     let response = request.send().await.map_err(|error| error.to_string())?;
     let status = response.status();
     let body_text = response.text().await.map_err(|error| error.to_string())?;
+    append_log_line(&format!(
+        "[Transcription] Worker response status={} body={}",
+        status.as_u16(),
+        body_text
+    ));
 
     if !status.is_success() {
         return Err(format!("HTTP {}: {}", status.as_u16(), body_text));
@@ -483,10 +491,7 @@ async fn transcribe_request(
 
 #[tauri::command]
 fn log_to_terminal(msg: String) {
-    if cfg!(debug_assertions) {
-        append_log_line(&format!("[JS Log] {msg}"));
-    }
-    let _ = msg;
+    append_log_line(&format!("[JS Log] {msg}"));
 }
 
 #[tauri::command]
@@ -515,6 +520,16 @@ fn set_cached_access_token(app: AppHandle, token: Option<String>) -> Result<(), 
     let mut cached_token = state.cached_access_token.lock().map_err(|e| e.to_string())?;
     *cached_token = token;
     Ok(())
+}
+
+#[tauri::command]
+fn get_recent_logs() -> Vec<String> {
+    recent_log_lines()
+}
+
+#[tauri::command]
+fn clear_recent_logs() {
+    clear_recent_log_lines();
 }
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -549,6 +564,7 @@ pub fn run() {
             overlay_ready: Mutex::new(false),
             overlay_last_seen: Mutex::new(None),
             overlay_layout_preferences: Mutex::new(OverlayLayoutPreferences::default()),
+            overlay_retry_abort: Mutex::new(None),
         })
         .invoke_handler(tauri::generate_handler![
             start_recording,
@@ -575,6 +591,7 @@ pub fn run() {
             overlay_window::show_notice_window,
             overlay_window::hide_notice_window,
             overlay_window::hide_recording_window,
+            overlay_window::resize_notice_window,
             show_settings_window,
             type_text,
             transcribe_request,
@@ -584,6 +601,8 @@ pub fn run() {
             consume_pending_deep_links,
             get_cached_access_token,
             set_cached_access_token,
+            get_recent_logs,
+            clear_recent_logs,
             emit_transcription_finished,
             secure_storage_get,
             secure_storage_set,
@@ -606,6 +625,20 @@ pub fn run() {
                     show_settings_window(app).ok();
                 },
                 toggle_main_window_visibility,
+                |app| {
+                    let app = app.clone();
+                    tauri::async_runtime::spawn(async move {
+                        if let Some(overlay) = app.get_webview_window("overlay") {
+                            if overlay.is_visible().unwrap_or(false) {
+                                let _ = overlay.hide();
+                            } else {
+                                let _ = overlay_window::show_overlay_window(app);
+                            }
+                        } else {
+                            let _ = overlay_window::show_recording_window(app);
+                        }
+                    });
+                },
             )?;
             if launched_in_background() {
                 if let Some(window) = app.get_webview_window("main") {

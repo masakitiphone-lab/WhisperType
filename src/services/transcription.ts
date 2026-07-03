@@ -3,7 +3,13 @@ import { supabase } from "@/lib/supabase";
 import { preprocessAudioBlobForTranscription } from "@/lib/audioPreprocess";
 import { readStoredAuthSessionSnapshot } from "@/lib/authStorage";
 import { buildTranscriptionSettingsPayload, readTranscriptionSettings } from "@/lib/transcription";
-import { getAudioFileName } from "@/services/audio";
+
+function getAudioFileName(blob: Blob): string {
+  if (blob.type.includes("wav")) return "audio.wav";
+  if (blob.type.includes("mp4")) return "audio.m4a";
+  if (blob.type.includes("ogg")) return "audio.ogg";
+  return "audio.webm";
+}
 
 type TranscriptionResponse = {
   text: string;
@@ -19,9 +25,8 @@ type TranscriptionContext = {
   is_unlimited: boolean;
 };
 
-const TRANSCRIPTION_REQUEST_TIMEOUT_MS = 15000;
-const TRANSCRIPTION_PREFETCH_TTL_MS = 300_000;
 const TRANSCRIBE_URL = import.meta.env.VITE_TRANSCRIBE_URL?.trim() || "";
+const TRANSCRIPTION_PREFETCH_TTL_MS = 300_000;
 const SUPABASE_REST_URL = import.meta.env.VITE_SUPABASE_URL
   ? `${String(import.meta.env.VITE_SUPABASE_URL).replace(/\/+$/, "")}/rest/v1`
   : "";
@@ -103,10 +108,12 @@ function isTokenUsable(accessToken: string | null | undefined, skewSeconds = 60)
 
 async function getUsableAccessToken() {
   let authFailureReason: string | null = null;
+  await invoke("log_to_terminal", { msg: "[Transcription] resolving access token" }).catch(() => {});
 
   try {
     const cachedToken = await invoke<string | null>("get_cached_access_token");
     if (isTokenUsable(cachedToken)) {
+      await invoke("log_to_terminal", { msg: "[Transcription] using cached access token" }).catch(() => {});
       return cachedToken;
     }
   } catch {
@@ -117,6 +124,7 @@ async function getUsableAccessToken() {
   } = await supabase.auth.getSession();
 
   if (!currentSession) {
+    await invoke("log_to_terminal", { msg: "[Transcription] no current session, checking stored session" }).catch(() => {});
     const storedSession = await readStoredAuthSessionSnapshot();
     if (storedSession?.access_token && storedSession.refresh_token) {
       const { data, error } = await supabase.auth.setSession({
@@ -132,6 +140,7 @@ async function getUsableAccessToken() {
   }
 
   if (isTokenUsable(currentSession?.access_token)) {
+    await invoke("log_to_terminal", { msg: "[Transcription] using current session token" }).catch(() => {});
     await invoke("set_cached_access_token", { token: currentSession.access_token }).catch((err) =>
       console.error("Failed to cache access token:", err)
     );
@@ -139,6 +148,7 @@ async function getUsableAccessToken() {
   }
 
   try {
+    await invoke("log_to_terminal", { msg: "[Transcription] refreshing session" }).catch(() => {});
     const { data, error } = await supabase.auth.refreshSession();
     if (error) {
       authFailureReason = error.message;
@@ -157,6 +167,7 @@ async function getUsableAccessToken() {
     data: { session: fallbackSession },
   } = await supabase.auth.getSession();
   if (isTokenUsable(fallbackSession?.access_token)) {
+    await invoke("log_to_terminal", { msg: "[Transcription] using fallback session token" }).catch(() => {});
     await invoke("set_cached_access_token", { token: fallbackSession.access_token }).catch((err) =>
       console.error("Failed to cache fallback token:", err)
     );
@@ -270,6 +281,7 @@ async function getTranscriptionContext(userId: string, accessToken: string): Pro
 
   const readRpcContext = async () => {
     const endpoint = `${SUPABASE_REST_URL}/rpc/get_transcription_context`;
+    await invoke("log_to_terminal", { msg: "[Transcription] fetching context via RPC" }).catch(() => {});
     let response: Response;
     try {
       response = await fetch(endpoint, {
@@ -382,28 +394,22 @@ async function invokeTranscriptionRequest(formData: FormData, accessToken: strin
   const normalizedModel = typeof model === "string" ? model : "";
   const normalizedPrompt = typeof prompt === "string" && prompt.trim() ? prompt.trim() : null;
 
-  const timeoutId = window.setTimeout(() => {}, TRANSCRIPTION_REQUEST_TIMEOUT_MS);
-
   let data: TranscriptionResponse;
+  const responseText = await invoke<string>("transcribe_request", {
+    endpoint,
+    accessToken,
+    apikey: SUPABASE_ANON_KEY || null,
+    fileName: file.name,
+    fileBytes: Array.from(fileBytes),
+    fileMimeType: file.type || "audio/webm",
+    language: normalizedLanguage,
+    model: normalizedModel,
+    prompt: normalizedPrompt,
+  });
   try {
-    const responseText = await invoke<string>("transcribe_request", {
-      endpoint,
-      accessToken,
-      apikey: SUPABASE_ANON_KEY || null,
-      fileName: file.name,
-      fileBytes: Array.from(fileBytes),
-      fileMimeType: file.type || "audio/webm",
-      language: normalizedLanguage,
-      model: normalizedModel,
-      prompt: normalizedPrompt,
-    });
-    try {
-      data = JSON.parse(responseText) as TranscriptionResponse;
-    } catch {
-      throw new Error(`invalid_json_response: ${responseText || "empty_body"}`);
-    }
-  } finally {
-    window.clearTimeout(timeoutId);
+    data = JSON.parse(responseText) as TranscriptionResponse;
+  } catch {
+    throw new Error(`invalid_json_response: ${responseText || "empty_body"}`);
   }
 
   if (!data?.text) {
@@ -419,8 +425,10 @@ export async function transcribeAudio(audioBlob: Blob): Promise<string> {
   }
 
   globalThis.__whispertype_hotkey_up_at_ms ??= nowMs();
+  await invoke("log_to_terminal", { msg: `[Transcription] start bytes=${audioBlob.size}` }).catch(() => {});
   let cachedPrefetchState = getPrefetchCache();
   if (!cachedPrefetchState) {
+    await invoke("log_to_terminal", { msg: "[Transcription] no prefetch cache" }).catch(() => {});
     const accessToken = await getUsableAccessToken();
     const userId = await getSessionUserId(accessToken);
     if (!userId) {
@@ -429,9 +437,11 @@ export async function transcribeAudio(audioBlob: Blob): Promise<string> {
     const context = await getTranscriptionContext(userId, accessToken);
     cachedPrefetchState = { accessToken, context, cachedAt: nowMs() };
     setPrefetchCache(accessToken, context);
+    await invoke("log_to_terminal", { msg: `[Transcription] context loaded plan=${context.plan} unlimited=${context.is_unlimited}` }).catch(() => {});
   }
 
   if (!cachedPrefetchState.context.is_unlimited && (cachedPrefetchState.context.available_credits ?? 0) <= 0) {
+    await invoke("log_to_terminal", { msg: "[Transcription] blocked by credits" }).catch(() => {});
     cachedPrefetch = null;
     throw new Error("insufficient_credits");
   }
@@ -442,6 +452,7 @@ export async function transcribeAudio(audioBlob: Blob): Promise<string> {
   }
 
   const accessToken = cachedPrefetchState.accessToken;
+  await invoke("log_to_terminal", { msg: `[Transcription] preprocessed bytes=${processedBlob.size}` }).catch(() => {});
 
   const file = new File([processedBlob], getAudioFileName(processedBlob), {
     type: processedBlob.type || "audio/webm",
@@ -460,15 +471,19 @@ export async function transcribeAudio(audioBlob: Blob): Promise<string> {
   }
 
   try {
+    await invoke("log_to_terminal", { msg: "[Transcription] sending request to Worker" }).catch(() => {});
     const data = await invokeTranscriptionRequest(formData, accessToken);
     const text = data.text.trim();
     if (!text) {
       throw new Error("empty_transcription");
     }
     cachedPrefetch = null;
+    await invoke("log_to_terminal", { msg: `[Transcription] success chars=${text.length}` }).catch(() => {});
     return text;
   } catch (error) {
     const errorCode = error instanceof Error ? error.message : "transcription_failed";
+    await invoke("log_to_terminal", { msg: `[Transcription] raw error ${errorCode}` }).catch(() => {});
+    await invoke("log_to_terminal", { msg: `[Transcription] failed ${errorCode}` }).catch(() => {});
 
     if (errorCode === "silent_audio") {
       throw new Error(errorCode);

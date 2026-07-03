@@ -1,4 +1,8 @@
 use std::{
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc,
+    },
     thread,
     time::{Duration, Instant},
 };
@@ -9,8 +13,8 @@ use tauri::{
 };
 
 use crate::{
-    log_store::append_log_line,
-    windowing::{
+    shared::log::append_log_line,
+    shared::windowing::{
         apply_overlay_visuals, position_overlay_window, resize_overlay_window,
         show_window_without_focus, OverlayPosition, OVERLAY_HEIGHT, OVERLAY_VERTICAL_OFFSET,
         OVERLAY_WIDTH,
@@ -93,10 +97,22 @@ pub(crate) fn ensure_overlay_window(app: &AppHandle, visible: bool) -> Result<()
     if visible {
         append_log_line("[Overlay] show requested");
         show_window_without_focus(&window);
+        let retry_abort = {
+            let state = app.state::<AppState>();
+            let abort = Arc::new(AtomicBool::new(false));
+            if let Ok(mut flag) = state.overlay_retry_abort.lock() {
+                *flag = Some(abort.clone());
+            }
+            abort
+        };
         let retry_window = window.clone();
         thread::spawn(move || {
             for delay_ms in [50_u64, 150_u64] {
                 thread::sleep(Duration::from_millis(delay_ms));
+                if retry_abort.load(Ordering::Relaxed) {
+                    append_log_line("[Overlay] retry aborted (window hidden)");
+                    return;
+                }
                 apply_overlay_visuals(&retry_window);
                 let _ = retry_window.set_always_on_top(true);
                 show_window_without_focus(&retry_window);
@@ -159,11 +175,21 @@ pub(crate) fn ensure_overlay_event_target(app: &AppHandle) -> Result<(), String>
 
     if let Some(window) = app.get_webview_window("overlay") {
         let _ = window.close();
-        thread::sleep(Duration::from_millis(80));
+        thread::sleep(Duration::from_millis(120));
     }
 
     ensure_overlay_window(app, false)?;
-    if wait_for_overlay_ready(app, Duration::from_millis(1200)) {
+    if wait_for_overlay_ready(app, Duration::from_millis(5000)) {
+        return Ok(());
+    }
+
+    append_log_line("[Overlay] first recreation attempt failed; retrying once");
+    if let Some(window) = app.get_webview_window("overlay") {
+        let _ = window.close();
+        thread::sleep(Duration::from_millis(120));
+    }
+    ensure_overlay_window(app, false)?;
+    if wait_for_overlay_ready(app, Duration::from_millis(5000)) {
         Ok(())
     } else {
         Err("overlay_not_ready".to_string())
@@ -189,6 +215,11 @@ pub(crate) fn show_overlay_window(app: AppHandle) -> Result<(), String> {
 
 #[tauri::command]
 pub(crate) fn hide_overlay_window(app: AppHandle) -> Result<(), String> {
+    if let Ok(mut flag) = app.state::<AppState>().overlay_retry_abort.lock() {
+        if let Some(abort) = flag.take() {
+            abort.store(true, Ordering::Relaxed);
+        }
+    }
     if let Some(window) = app.get_webview_window("overlay") {
         let _ = window.hide();
     }
@@ -261,6 +292,14 @@ pub(crate) fn get_overlay_layout_preferences(
 
 #[tauri::command]
 pub(crate) fn close_overlay_window(app: AppHandle) -> Result<(), String> {
+    if let Ok(mut flag) = app.state::<AppState>().overlay_retry_abort.lock() {
+        if let Some(abort) = flag.take() {
+            abort.store(true, Ordering::Relaxed);
+        }
+    }
+    if let Some(notice) = app.get_webview_window("notice") {
+        let _ = notice.close();
+    }
     if let Some(window) = app.get_webview_window("overlay") {
         let _ = window.close();
     }
@@ -269,6 +308,11 @@ pub(crate) fn close_overlay_window(app: AppHandle) -> Result<(), String> {
 
 #[tauri::command]
 pub(crate) fn hide_recording_window(app: AppHandle) -> Result<(), String> {
+    if let Ok(mut flag) = app.state::<AppState>().overlay_retry_abort.lock() {
+        if let Some(abort) = flag.take() {
+            abort.store(true, Ordering::Relaxed);
+        }
+    }
     if let Some(window) = app.get_webview_window("overlay") {
         let _ = window.hide();
     }
@@ -290,7 +334,6 @@ fn ensure_notice_window(app: &AppHandle) -> Result<tauri::WebviewWindow, String>
         .visible(false)
         .build()
         .map_err(|e| e.to_string())?;
-    show_window_without_focus(&window);
     Ok(window)
 }
 
@@ -320,6 +363,23 @@ pub(crate) fn show_notice_window(app: AppHandle, payload: NoticePayload) -> Resu
 pub(crate) fn hide_notice_window(app: AppHandle) -> Result<(), String> {
     if let Some(window) = app.get_webview_window("notice") {
         let _ = window.hide();
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub(crate) fn resize_notice_window(
+    app: AppHandle,
+    width: f64,
+    height: f64,
+) -> Result<(), String> {
+    if let Some(window) = app.get_webview_window("notice") {
+        let logical_width = width.max(1.0).ceil();
+        let logical_height = height.max(1.0).ceil();
+        let _ = window.set_size(tauri::Size::Logical(tauri::LogicalSize {
+            width: logical_width,
+            height: logical_height,
+        }));
     }
     Ok(())
 }

@@ -413,9 +413,8 @@ async fn transcribe_request(
     let status = response.status();
     let body_text = response.text().await.map_err(|error| error.to_string())?;
     append_log_line(&format!(
-        "[Transcription] Worker response status={} body={}",
+        "[Transcription] Worker response status={}",
         status.as_u16(),
-        body_text
     ));
 
     if !status.is_success() {

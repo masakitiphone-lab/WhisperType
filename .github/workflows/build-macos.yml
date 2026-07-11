@@ -49,15 +49,6 @@ jobs:
 
       - name: Build frontend
         run: pnpm build
-<<<<<<< HEAD
-=======
-        env:
-          VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL || 'http://127.0.0.1:54321' }}
-          VITE_SUPABASE_ANON_KEY: ${{ vars.VITE_SUPABASE_ANON_KEY || '' }}
-          VITE_TRANSCRIBE_URL: ${{ vars.VITE_TRANSCRIBE_URL || 'http://127.0.0.1:8787' }}
-          VITE_AUTH_REDIRECT_URL: ${{ vars.VITE_AUTH_REDIRECT_URL || 'whispertype://auth/callback' }}
->>>>>>> 76c0a9ef47068d3322c0f3d617003f87660d788a
-
       - name: Setup Rust cache
         uses: swatinem/rust-cache@v2
         with:
@@ -66,13 +57,6 @@ jobs:
 
       - name: Build Tauri app
         run: pnpm tauri build --bundles dmg --target ${{ matrix.arch }}
-<<<<<<< HEAD
-=======
-        env:
-          WHISPERTYPE_PLUS_STORE_ID: ${{ vars.WHISPERTYPE_PLUS_STORE_ID || '' }}
-          WHISPERTYPE_TRANSCRIBE_HOST_ALLOWLIST: ${{ vars.WHISPERTYPE_TRANSCRIBE_HOST_ALLOWLIST || '' }}
->>>>>>> 76c0a9ef47068d3322c0f3d617003f87660d788a
-
       - name: Upload DMG
         uses: actions/upload-artifact@v4
         with:

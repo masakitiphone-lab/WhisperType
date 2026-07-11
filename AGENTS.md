@@ -16,7 +16,7 @@
 - Plus plan:
   - Do not check credits.
   - Treat transcription as unlimited for billing and user-facing copy.
-  - Keep the abuse-protection cap internal at 999 transcriptions per day; do not show that number in UI or public copy.
+  - Keep the abuse-protection cap internal; do not show that number in UI or public copy.
 
 ## Current release rules
 - Microsoft Store Plus is an in-app subscription add-on for the free app (Windows only).

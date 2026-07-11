@@ -1,9 +1,5 @@
 #[cfg(target_os = "macos")]
-<<<<<<< HEAD
 use crate::shared::log::append_log_line;
-=======
-use crate::log_store::append_log_line;
->>>>>>> 76c0a9ef47068d3322c0f3d617003f87660d788a
 
 #[cfg(target_os = "macos")]
 pub fn is_accessibility_trusted() -> bool {

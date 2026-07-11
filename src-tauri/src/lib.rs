@@ -7,13 +7,9 @@ pub(crate) mod overlay_window;
 mod secure_storage;
 mod tray;
 mod text_input;
-<<<<<<< HEAD
-=======
-mod ms_store;
->>>>>>> 76c0a9ef47068d3322c0f3d617003f87660d788a
 mod accessibility;
 
-use tauri::{AppHandle, Emitter, Manager, UserAttentionType, WebviewUrl, WebviewWindowBuilder};
+use tauri::{AppHandle, Manager, UserAttentionType, WebviewUrl, WebviewWindowBuilder};
 use reqwest::multipart;
 use hotkeys::{create_hotkey_backend, HotkeyBackend, HotkeyBackendInfo};
 #[cfg(target_os = "macos")]
@@ -22,10 +18,6 @@ use hotkeys::{
     probe_macos_native_event_tap,
     request_macos_input_monitoring_permission,
 };
-<<<<<<< HEAD
-=======
-use tauri_plugin_deep_link::DeepLinkExt;
->>>>>>> 76c0a9ef47068d3322c0f3d617003f87660d788a
 use reqwest::Url;
 use text_input::type_text_internal;
 use shared::log::append_log_line;
@@ -44,15 +36,7 @@ use std::{sync::Mutex, time::Instant};
 #[cfg(target_os = "windows")]
 use std::process::Command;
 use std::sync::{atomic::AtomicBool, Arc};
-<<<<<<< HEAD
 use secure_storage::{secure_storage_delete, secure_storage_get, secure_storage_set};
-
-=======
-use ms_store::{check_plus_store_license, get_checkout_provider, is_store_build, purchase_plus_via_store};
-use secure_storage::{secure_storage_delete, secure_storage_get, secure_storage_set};
-
-const TRANSCRIBE_HOST_ALLOWLIST: Option<&str> = option_env!("WHISPERTYPE_TRANSCRIBE_HOST_ALLOWLIST");
->>>>>>> 76c0a9ef47068d3322c0f3d617003f87660d788a
 
 #[derive(Clone, serde::Serialize)]
 struct RecordingState {
@@ -64,11 +48,6 @@ struct AppState {
     recording: Mutex<RecordingState>,
     current_shortcut: Mutex<String>,
     hotkey_backend: Box<dyn HotkeyBackend>,
-<<<<<<< HEAD
-=======
-    pending_deep_links: Mutex<Vec<String>>,
-    cached_access_token: Mutex<Option<String>>,
->>>>>>> 76c0a9ef47068d3322c0f3d617003f87660d788a
     overlay_ready: Mutex<bool>,
     overlay_last_seen: Mutex<Option<Instant>>,
     overlay_layout_preferences: Mutex<OverlayLayoutPreferences>,
@@ -76,29 +55,6 @@ struct AppState {
 }
 
 
-<<<<<<< HEAD
-=======
-fn queue_and_emit_deep_links(app: &AppHandle, urls: Vec<String>) {
-    if urls.is_empty() {
-        return;
-    }
-
-    if let Ok(mut pending_links) = app.state::<AppState>().pending_deep_links.lock() {
-        pending_links.extend(urls.clone());
-    }
-
-    restore_main_window(app);
-    let _ = app.emit("deep-link-received", serde_json::json!({ "urls": urls }));
-}
-fn summarize_deep_link_arg(arg: &str) -> &str {
-    if arg.starts_with("whispertype://") {
-        "whispertype://auth/callback?[redacted]"
-    } else {
-        arg
-    }
-}
-
->>>>>>> 76c0a9ef47068d3322c0f3d617003f87660d788a
 fn toggle_main_window_visibility(app: &AppHandle) {
     if let Some(window) = app.get_webview_window("main") {
         let is_visible = window.is_visible().unwrap_or(false);
@@ -248,17 +204,6 @@ fn stop_recording(app: AppHandle) -> Result<(), String> {
 }
 
 pub(crate) fn start_recording_internal(app: &AppHandle, source: &str) -> Result<bool, String> {
-<<<<<<< HEAD
-=======
-    if let Ok(cached_access_token) = app.state::<AppState>().cached_access_token.lock() {
-        if cached_access_token.is_none() {
-            append_log_line("[Shortcut] no cached access token; prompting auth via main window");
-            restore_main_window(app);
-            app.emit("auth-required", ()).ok();
-        }
-    }
-
->>>>>>> 76c0a9ef47068d3322c0f3d617003f87660d788a
     let state = app.state::<AppState>();
     let mut recording = state.recording.lock().map_err(|e| e.to_string())?;
     if recording.is_recording {
@@ -413,46 +358,10 @@ fn type_text(_app: AppHandle, text: String, use_clipboard_paste: bool) -> Result
     type_text_internal(text, use_clipboard_paste)
 }
 
-<<<<<<< HEAD
 
 #[tauri::command]
 async fn transcribe_request(
     groq_api_key: String,
-=======
-fn validate_transcribe_endpoint(endpoint: &str) -> Result<Url, String> {
-    let url = Url::parse(endpoint).map_err(|_| "invalid_transcribe_endpoint".to_string())?;
-    let host = url.host_str().ok_or_else(|| "invalid_transcribe_endpoint".to_string())?;
-    let is_localhost = matches!(host, "localhost" | "127.0.0.1" | "::1");
-
-    if cfg!(debug_assertions) && is_localhost {
-        return Ok(url);
-    }
-
-    if url.scheme() != "https" || is_localhost {
-        return Err("invalid_transcribe_endpoint".to_string());
-    }
-
-    if let Some(allowlist) = TRANSCRIBE_HOST_ALLOWLIST {
-        let allowed = allowlist
-            .split(',')
-            .map(str::trim)
-            .filter(|value| !value.is_empty())
-            .any(|allowed_host| host == allowed_host);
-
-        if !allowed {
-            return Err("transcribe_endpoint_not_allowed".to_string());
-        }
-    }
-
-    Ok(url)
-}
-
-#[tauri::command]
-async fn transcribe_request(
-    endpoint: String,
-    access_token: String,
-    apikey: Option<String>,
->>>>>>> 76c0a9ef47068d3322c0f3d617003f87660d788a
     file_name: String,
     file_bytes: Vec<u8>,
     file_mime_type: String,
@@ -464,15 +373,11 @@ async fn transcribe_request(
         .timeout(std::time::Duration::from_secs(30))
         .build()
         .map_err(|error| error.to_string())?;
-<<<<<<< HEAD
     if groq_api_key.trim().is_empty() {
         return Err("groq_api_key_missing".to_string());
     }
     let endpoint_url = Url::parse("https://api.groq.com/openai/v1/audio/transcriptions")
         .map_err(|error| error.to_string())?;
-=======
-    let endpoint_url = validate_transcribe_endpoint(&endpoint)?;
->>>>>>> 76c0a9ef47068d3322c0f3d617003f87660d788a
     let file_size = file_bytes.len();
     let has_language = language
         .as_ref()
@@ -499,21 +404,11 @@ async fn transcribe_request(
         form = form.text("prompt", prompt);
     }
 
-    let mut request = client
+    let request = client
         .post(endpoint_url)
-<<<<<<< HEAD
         .bearer_auth(groq_api_key)
         .multipart(form);
 
-=======
-        .bearer_auth(access_token)
-        .multipart(form);
-
-    if let Some(apikey) = apikey.filter(|value| !value.trim().is_empty()) {
-        request = request.header("apikey", apikey);
-    }
-
->>>>>>> 76c0a9ef47068d3322c0f3d617003f87660d788a
     let response = request.send().await.map_err(|error| error.to_string())?;
     let status = response.status();
     let body_text = response.text().await.map_err(|error| error.to_string())?;
@@ -536,37 +431,6 @@ fn log_to_terminal(msg: String) {
 }
 
 #[tauri::command]
-<<<<<<< HEAD
-=======
-fn consume_pending_deep_links(app: AppHandle) -> Result<Vec<String>, String> {
-    let state = app.state::<AppState>();
-    let mut pending_links = state.pending_deep_links.lock().map_err(|e| e.to_string())?;
-    let urls = pending_links.clone();
-    pending_links.clear();
-    Ok(urls)
-}
-
-#[tauri::command]
-fn get_cached_access_token(app: AppHandle) -> Result<Option<String>, String> {
-    let state = app.state::<AppState>();
-    let token = state
-        .cached_access_token
-        .lock()
-        .map_err(|e| e.to_string())?
-        .clone();
-    Ok(token)
-}
-
-#[tauri::command]
-fn set_cached_access_token(app: AppHandle, token: Option<String>) -> Result<(), String> {
-    let state = app.state::<AppState>();
-    let mut cached_token = state.cached_access_token.lock().map_err(|e| e.to_string())?;
-    *cached_token = token;
-    Ok(())
-}
-
-#[tauri::command]
->>>>>>> 76c0a9ef47068d3322c0f3d617003f87660d788a
 fn get_recent_logs() -> Vec<String> {
     recent_log_lines()
 }
@@ -583,25 +447,9 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
-<<<<<<< HEAD
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
             restore_main_window(app);
         }))
-=======
-        .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
-            restore_main_window(app);
-            let redacted_args = args
-                .iter()
-                .map(|arg| summarize_deep_link_arg(arg).to_string())
-                .collect::<Vec<_>>();
-            #[cfg(debug_assertions)]
-            println!("[Rust] Single instance triggered. Args: {:?}", redacted_args);
-            if args.len() > 1 && args[1].starts_with("whispertype://") {
-                queue_and_emit_deep_links(app, vec![args[1].clone()]);
-            }
-        }))
-        .plugin(tauri_plugin_deep_link::init())
->>>>>>> 76c0a9ef47068d3322c0f3d617003f87660d788a
         .manage(AppState {
             recording: Mutex::new(RecordingState {
                 is_recording: false,
@@ -609,11 +457,6 @@ pub fn run() {
             }),
             current_shortcut: Mutex::new("Ctrl+Alt".to_string()),
             hotkey_backend: create_hotkey_backend(),
-<<<<<<< HEAD
-=======
-            pending_deep_links: Mutex::new(Vec::new()),
-            cached_access_token: Mutex::new(None),
->>>>>>> 76c0a9ef47068d3322c0f3d617003f87660d788a
             overlay_ready: Mutex::new(false),
             overlay_last_seen: Mutex::new(None),
             overlay_layout_preferences: Mutex::new(OverlayLayoutPreferences::default()),
@@ -651,25 +494,12 @@ pub fn run() {
             log_to_terminal,
             detect_speech_with_vad,
             process_audio_with_ffmpeg,
-<<<<<<< HEAD
-=======
-            consume_pending_deep_links,
-            get_cached_access_token,
-            set_cached_access_token,
->>>>>>> 76c0a9ef47068d3322c0f3d617003f87660d788a
             get_recent_logs,
             clear_recent_logs,
             emit_transcription_finished,
             secure_storage_get,
             secure_storage_set,
             secure_storage_delete,
-<<<<<<< HEAD
-=======
-            get_checkout_provider,
-            is_store_build,
-            purchase_plus_via_store,
-            check_plus_store_license,
->>>>>>> 76c0a9ef47068d3322c0f3d617003f87660d788a
             accessibility::get_accessibility_status,
             accessibility::request_accessibility_permission_command,
         ])
@@ -706,17 +536,6 @@ pub fn run() {
             } else {
                 restore_main_window(app.handle());
             }
-<<<<<<< HEAD
-=======
-            let handle = app.handle().clone();
-            app.deep_link().on_open_url(move |event| {
-                let urls = event.urls().iter().map(|url| url.to_string()).collect::<Vec<_>>();
-                #[cfg(debug_assertions)]
-                println!("[Rust] Deep link received.");
-                queue_and_emit_deep_links(&handle, urls);
-            });
-
->>>>>>> 76c0a9ef47068d3322c0f3d617003f87660d788a
             register_global_shortcut(app.handle(), "Ctrl+Alt")?;
 
             overlay_window::ensure_overlay_window(app.handle(), false).ok();

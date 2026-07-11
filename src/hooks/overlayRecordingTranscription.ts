@@ -13,12 +13,9 @@ const SHOWABLE_ERROR_CODES = new Set([
   "transcription_timeout",
   "empty_transcription",
   "invalid_audio",
-  "auth_required",
-  "insufficient_credits",
+  "groq_api_key_missing",
   "ctrl_v_send_failed",
-  "profile_unavailable",
   "provider_unavailable",
-  "history_store_failed",
 ]);
 
 export async function stopRecordingAndCreateBlob(recording: ActiveRecording) {

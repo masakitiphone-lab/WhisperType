@@ -12,10 +12,6 @@
   },
   "dependencies": {
     "@radix-ui/react-slot": "^1.2.4",
-<<<<<<< HEAD
-=======
-    "@supabase/supabase-js": "^2.98.0",
->>>>>>> 76c0a9ef47068d3322c0f3d617003f87660d788a
     "@tauri-apps/api": "^2",
     "@tauri-apps/plugin-opener": "^2",
     "class-variance-authority": "^0.7.1",

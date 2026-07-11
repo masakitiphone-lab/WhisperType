@@ -1,8 +1,3 @@
-<<<<<<< HEAD
-=======
-import { COPY, type Copy } from "@/lib/appCopyData";
-
->>>>>>> 76c0a9ef47068d3322c0f3d617003f87660d788a
 export type AppLocale = "en" | "ja" | "es";
 
 export const DEFAULT_APP_LOCALE: AppLocale = "ja";
@@ -42,10 +37,4 @@ export function writeAppLocale(locale: AppLocale) {
     }),
   );
 }
-<<<<<<< HEAD
-=======
 
-export function getAppCopy(locale: AppLocale): Copy {
-  return COPY[locale];
-}
->>>>>>> 76c0a9ef47068d3322c0f3d617003f87660d788a

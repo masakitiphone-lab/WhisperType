@@ -1,6 +1,6 @@
-import { useEffect, useState, type Dispatch, type ReactNode, type SetStateAction } from "react";
+import { useEffect, useState, type Dispatch, type SetStateAction } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { Check, ChevronDown, Mic, Play, SlidersHorizontal, Square, Trash2 } from "lucide-react";
+import { Check, ChevronDown, Mic, Play, SlidersHorizontal, Square } from "lucide-react";
 import { HotkeyRecorder } from "@/components/HotkeyRecorder";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -12,83 +12,59 @@ import { DEFAULT_TRANSCRIPTION_PROMPT, ENGLISH_TRANSCRIPTION_PROMPT, JAPANESE_TR
 import { MainPageOverlaySettings } from "@/pages/MainPageOverlaySettings";
 import { GLASS_CARD, GLASS_PANEL } from "@/pages/mainPageTypes";
 import type { HotkeyBackendInfo, UiCopy } from "@/pages/settingsPageData";
-<<<<<<< HEAD
 import { getGroqApiKey, setGroqApiKey } from "@/services/transcription";
-=======
->>>>>>> 76c0a9ef47068d3322c0f3d617003f87660d788a
 
 type AudioInput = {
   deviceId: string;
   label: string;
 };
 
-type DeleteAccountCopy = {
-  open: string;
-};
-
 type MainPageSettingsSectionProps = {
   appLocale: AppLocale;
   audioInputs: AudioInput[];
-  deleteAccountCopy: DeleteAccountCopy;
   hotkey: string;
   hotkeyBackendInfo: HotkeyBackendInfo | null;
   hotkeyStatusMessage: string;
   micState: "checking" | "available" | "missing" | "blocked";
   micTestLevel: number;
   micTestState: "idle" | "testing" | "error";
-  sectionAccent: ReactNode;
-  sectionHeaderClass: string;
-  sectionIconClass: string;
-  sectionTitleClass: string;
   settings: AppSettings;
   setSettings: Dispatch<SetStateAction<AppSettings>>;
   ui: UiCopy;
-  onDeleteAccountOpen: () => void;
   onHotkeyChange: (nextHotkey: string) => void;
   onHotkeyInvalid: (message: string) => void;
   onMicTestStart: () => void;
   onMicTestStop: () => void;
   onPreferredAudioInputDeviceChange: (deviceId: string) => void;
-  setSectionRef: (element: HTMLElement | null) => void;
 };
 
 export function MainPageSettingsSection({
   appLocale,
   audioInputs,
-  deleteAccountCopy,
   hotkey,
   hotkeyBackendInfo,
   hotkeyStatusMessage,
   micState,
   micTestLevel,
   micTestState,
-  sectionAccent,
-  sectionHeaderClass,
-  sectionIconClass,
-  sectionTitleClass,
   settings,
   setSettings,
   ui,
-  onDeleteAccountOpen,
   onHotkeyChange,
   onHotkeyInvalid,
   onMicTestStart,
   onMicTestStop,
   onPreferredAudioInputDeviceChange,
-  setSectionRef,
 }: MainPageSettingsSectionProps) {
   const micTestLevelBars = 44;
   const micTestActiveBars = Math.round(micTestLevel * micTestLevelBars);
   const [recentLogs, setRecentLogs] = useState<string[]>([]);
-<<<<<<< HEAD
   const [groqApiKey, setGroqApiKeyState] = useState("");
   const [groqKeyStatus, setGroqKeyStatus] = useState("");
 
   useEffect(() => {
     void getGroqApiKey().then(setGroqApiKeyState).catch(() => {});
   }, []);
-=======
->>>>>>> 76c0a9ef47068d3322c0f3d617003f87660d788a
 
   useEffect(() => {
     let active = true;
@@ -113,18 +89,14 @@ export function MainPageSettingsSection({
   }, []);
 
   return (
-    <section ref={setSectionRef} id="settings" className="scroll-mt-8">
-      <div className="mb-3">
-        <div className={sectionHeaderClass}>
-          <SlidersHorizontal className={sectionIconClass} />
-          <p className={sectionTitleClass}>{appLocale === "ja" ? "設定" : "Settings"}</p>
-          {sectionAccent}
-        </div>
+    <section id="settings" className="scroll-mt-8">
+      <div className="mb-3 flex items-center gap-3">
+        <SlidersHorizontal className="h-5 w-5 text-slate-600 dark:text-slate-200" />
+        <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">{appLocale === "ja" ? "設定" : "Settings"}</p>
       </div>
       <Card className={GLASS_CARD}>
         <CardContent className="space-y-4 pt-6">
           <div className={GLASS_PANEL + " p-4"}>
-<<<<<<< HEAD
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Groq API key</p>
             <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">
               {appLocale === "ja" ? "キーはこの端末の安全なストレージにのみ保存され、Groqへ直接送信されます。" : "Stored only in this device's secure storage and sent directly to Groq."}
@@ -144,8 +116,6 @@ export function MainPageSettingsSection({
             {groqKeyStatus ? <p className="mt-2 text-xs text-emerald-600">{groqKeyStatus}</p> : null}
           </div>
           <div className={GLASS_PANEL + " p-4"}>
-=======
->>>>>>> 76c0a9ef47068d3322c0f3d617003f87660d788a
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
               {appLocale === "ja" ? "ショートカットキー" : "Shortcut key"}
             </p>
@@ -315,29 +285,6 @@ export function MainPageSettingsSection({
             </div>
           </div>
 
-          <div className={GLASS_PANEL + " p-4"}>
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-                  {appLocale === "ja" ? "アカウントデータ" : "Account data"}
-                </p>
-                <p className="mt-1 text-xs leading-5 text-slate-500 dark:text-slate-400">
-                  {appLocale === "ja"
-                    ? "プロフィールと文字起こし履歴を削除します。"
-                    : "Delete your profile and transcription history."}
-                </p>
-              </div>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={onDeleteAccountOpen}
-                className="justify-start border-rose-200 text-rose-700 hover:bg-rose-50 dark:border-rose-400/20 dark:text-rose-300 dark:hover:bg-rose-400/10"
-              >
-                <Trash2 className="mr-2 h-4 w-4" />
-                {deleteAccountCopy.open}
-              </Button>
-            </div>
-          </div>
         </CardContent>
       </Card>
     </section>

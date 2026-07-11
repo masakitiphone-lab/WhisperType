@@ -25,8 +25,7 @@
   soundVolume: number;
   autoInsert: boolean;
   onboardingCompleted: boolean;
-  onboardingCompletedUserIds: string[];
-  tutorialCompletedUserIds: string[];
+  tutorialCompleted: boolean;
   preferredAudioInputDeviceId: string;
 };
 
@@ -51,8 +50,7 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   soundVolume: 0.25,
   autoInsert: true,
   onboardingCompleted: false,
-  onboardingCompletedUserIds: [],
-  tutorialCompletedUserIds: [],
+  tutorialCompleted: false,
   preferredAudioInputDeviceId: "",
 };
 
@@ -67,17 +65,13 @@ export function readAppSettings(): AppSettings {
       return DEFAULT_APP_SETTINGS;
     }
 
-    const parsed = JSON.parse(raw) as Partial<AppSettings>;
-    const onboardingCompletedUserIds = Array.isArray(parsed.onboardingCompletedUserIds)
-      ? parsed.onboardingCompletedUserIds.filter(
-          (value): value is string => typeof value === "string" && value.trim().length > 0,
-        )
-      : DEFAULT_APP_SETTINGS.onboardingCompletedUserIds;
-    const tutorialCompletedUserIds = Array.isArray(parsed.tutorialCompletedUserIds)
-      ? parsed.tutorialCompletedUserIds.filter(
-          (value): value is string => typeof value === "string" && value.trim().length > 0,
-        )
-      : DEFAULT_APP_SETTINGS.tutorialCompletedUserIds;
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    const onboardingCompleted =
+      parsed.onboardingCompleted === true ||
+      (Array.isArray(parsed.onboardingCompletedUserIds) && (parsed.onboardingCompletedUserIds as unknown[]).length > 0);
+    const tutorialCompleted =
+      parsed.tutorialCompleted === true ||
+      (Array.isArray(parsed.tutorialCompletedUserIds) && (parsed.tutorialCompletedUserIds as unknown[]).length > 0);
 
     const hotkey =
       typeof parsed.hotkey === "string" && parsed.hotkey.trim().length > 0
@@ -108,8 +102,8 @@ export function readAppSettings(): AppSettings {
       ...DEFAULT_APP_SETTINGS,
       ...parsed,
       hotkey,
-      onboardingCompletedUserIds,
-      tutorialCompletedUserIds,
+      onboardingCompleted,
+      tutorialCompleted,
       preferredAudioInputDeviceId:
         typeof parsed.preferredAudioInputDeviceId === "string"
           ? parsed.preferredAudioInputDeviceId

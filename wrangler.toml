@@ -1,3 +1,0 @@
-name = "whisper-type-transcribe"
-main = "docs/cloudflare-worker-transcribe.js"
-compatibility_date = "2025-06-01"

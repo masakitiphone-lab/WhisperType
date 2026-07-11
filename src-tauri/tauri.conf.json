@@ -22,11 +22,7 @@
       }
     ],
     "security": {
-<<<<<<< HEAD
       "csp": "default-src 'self'; base-uri 'self'; object-src 'none'; frame-src 'none'; img-src 'self' asset: data: blob: https:; font-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self' ipc: http://ipc.localhost http://localhost:* ws://localhost:* http://127.0.0.1:* ws://127.0.0.1:* https://api.groq.com; media-src 'self' blob: data:; worker-src 'self' blob:;"
-=======
-      "csp": "default-src 'self'; base-uri 'self'; object-src 'none'; frame-src 'none'; img-src 'self' asset: data: blob: https:; font-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self' ipc: http://ipc.localhost http://localhost:* ws://localhost:* http://127.0.0.1:* ws://127.0.0.1:* https://*.supabase.co wss://*.supabase.co https://accounts.google.com https://www.googleapis.com https://fonts.gstatic.com; media-src 'self' blob: data:; worker-src 'self' blob:;"
->>>>>>> 76c0a9ef47068d3322c0f3d617003f87660d788a
     }
   },
   "bundle": {
@@ -45,17 +41,5 @@
       "hardenedRuntime": true,
       "entitlements": "entitlements.plist"
     }
-<<<<<<< HEAD
-=======
-  },
-  "plugins": {
-    "deep-link": {
-      "desktop": {
-        "schemes": [
-          "whispertype"
-        ]
-      }
-    }
->>>>>>> 76c0a9ef47068d3322c0f3d617003f87660d788a
   }
 }

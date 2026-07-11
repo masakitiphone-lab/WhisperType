@@ -44,13 +44,6 @@ export type UiCopyKey =
   | "interfaceDescription"
   | "transcriptionLanguage"
   | "model"
-<<<<<<< HEAD
-=======
-  | "promoTitle"
-  | "promoPlaceholder"
-  | "promoButton"
-  | "promoNote"
->>>>>>> 76c0a9ef47068d3322c0f3d617003f87660d788a
   | "hotkeyTitle"
   | "hotkeyDescription"
   | "hotkeyIdleHint"
@@ -95,13 +88,6 @@ const EN: UiCopy = {
   interfaceDescription: "Adjust language, model, shortcut, and display settings in one place.",
   transcriptionLanguage: "Transcription language",
   model: "Model",
-<<<<<<< HEAD
-=======
-  promoTitle: "Promotion code",
-  promoPlaceholder: "Enter a code",
-  promoButton: "Claim credits",
-  promoNote: "Promotion code entry is handled from the plan page.",
->>>>>>> 76c0a9ef47068d3322c0f3d617003f87660d788a
   hotkeyTitle: "Shortcut",
   hotkeyDescription: "Choose a shortcut that lets you start dictation instantly while you work.",
   hotkeyIdleHint: "Click the card, press the shortcut, then release all keys to save it.",
@@ -145,13 +131,6 @@ const JA: UiCopy = {
   interfaceDescription: "言語、モデル、ショートカット、表示設定をまとめて調整できます。",
   transcriptionLanguage: "文字起こし言語",
   model: "モデル",
-<<<<<<< HEAD
-=======
-  promoTitle: "プロモーションコード",
-  promoPlaceholder: "コードを入力",
-  promoButton: "クレジットを受け取る",
-  promoNote: "プロモーションコードはプラン画面から入力できます。",
->>>>>>> 76c0a9ef47068d3322c0f3d617003f87660d788a
   hotkeyTitle: "ショートカット",
   hotkeyDescription: "音声入力をすぐに始められるキー操作を設定します。",
   hotkeyIdleHint: "カードをクリックし、設定したいキーを押してから離すと保存されます。",
@@ -195,13 +174,6 @@ const ES: UiCopy = {
   interfaceDescription: "Ajusta idioma, modelo, atajos y visualización en un solo lugar.",
   transcriptionLanguage: "Idioma de transcripción",
   model: "Modelo",
-<<<<<<< HEAD
-=======
-  promoTitle: "Código promocional",
-  promoPlaceholder: "Introduce un código",
-  promoButton: "Canjear créditos",
-  promoNote: "El código promocional se introduce desde la página del plan.",
->>>>>>> 76c0a9ef47068d3322c0f3d617003f87660d788a
   hotkeyTitle: "Atajo",
   hotkeyDescription: "Configura un atajo cómodo para empezar a dictar al instante.",
   hotkeyIdleHint: "Haz clic en la tarjeta, pulsa la combinación y suelta todas las teclas para guardarla.",

@@ -1,0 +1,528 @@
+use super::{BindingToken, HotkeyBackend, HotkeyBackendInfo, HotkeyBinding};
+use crate::shared::log::append_log_line;
+use std::{
+    collections::HashSet,
+    mem,
+    ptr,
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        mpsc::{self, Sender},
+        Arc, Mutex, OnceLock,
+    },
+    thread,
+};
+use tauri::AppHandle;
+use windows::core::w;
+use windows::Win32::{
+    Foundation::{HINSTANCE, HWND, LPARAM, LRESULT, WPARAM},
+    System::LibraryLoader::GetModuleHandleW,
+    UI::{
+        Input::{
+            GetRawInputData, RegisterRawInputDevices, HRAWINPUT, RAWINPUT, RAWINPUTDEVICE,
+            RAWINPUTHEADER, RID_INPUT, RIDEV_INPUTSINK, RIM_TYPEKEYBOARD,
+        },
+        WindowsAndMessaging::{
+            CreateWindowExW, DefWindowProcW, DispatchMessageW, GetMessageW, RegisterClassW,
+            TranslateMessage, CW_USEDEFAULT, HWND_MESSAGE, MSG, WM_INPUT, WM_KEYDOWN, WM_KEYUP,
+            WM_SYSKEYDOWN, WM_SYSKEYUP, WNDCLASSW, WS_OVERLAPPED,
+        },
+    },
+};
+
+#[derive(Default)]
+pub struct WindowsHookHotkeyBackend;
+
+#[derive(Default)]
+struct HookSharedState {
+    binding_label: Mutex<String>,
+    required_groups: Mutex<Vec<Vec<u16>>>,
+    pressed_keys: Mutex<HashSet<u16>>,
+    active: AtomicBool,
+    app_handle: Mutex<Option<AppHandle>>,
+    command_sender: Mutex<Option<Sender<ShortcutCommand>>>,
+    last_error: Mutex<Option<String>>,
+}
+
+static HOOK_STATE: OnceLock<Arc<HookSharedState>> = OnceLock::new();
+
+enum ShortcutCommand {
+    Start { binding_label: String },
+    Stop { binding_label: String },
+}
+
+fn shared_state() -> Arc<HookSharedState> {
+    HOOK_STATE
+        .get_or_init(|| {
+            let state = Arc::new(HookSharedState::default());
+            start_command_thread(state.clone());
+            start_raw_input_thread(state.clone());
+            state
+        })
+        .clone()
+}
+
+fn start_command_thread(state: Arc<HookSharedState>) {
+    let (sender, receiver) = mpsc::channel::<ShortcutCommand>();
+    *state.command_sender.lock().unwrap() = Some(sender);
+
+    thread::spawn(move || {
+        while let Ok(command) = receiver.recv() {
+            match command {
+                ShortcutCommand::Start { binding_label } => {
+                    append_log_line(&format!("[Shortcut] matched: {binding_label}"));
+                    start_overlay_session(&state);
+                }
+                ShortcutCommand::Stop { binding_label } => {
+                    append_log_line(&format!("[Shortcut] released: {binding_label}"));
+                    stop_overlay_session(&state);
+                }
+            }
+        }
+    });
+}
+
+fn start_raw_input_thread(state: Arc<HookSharedState>) {
+    thread::spawn(move || unsafe {
+        let module = GetModuleHandleW(None).unwrap_or_default();
+        let instance = HINSTANCE(module.0);
+        let class_name = w!("WhisperTypeRawInputSink");
+        let window_class = WNDCLASSW {
+            lpfnWndProc: Some(raw_input_window_proc),
+            hInstance: instance,
+            lpszClassName: class_name,
+            ..Default::default()
+        };
+
+        let class_atom = RegisterClassW(&window_class);
+        if class_atom == 0 {
+            *state.last_error.lock().unwrap() =
+                Some("Failed to register Windows raw input window class.".to_string());
+            return;
+        }
+
+        let hwnd = match CreateWindowExW(
+            Default::default(),
+            class_name,
+            w!("WhisperTypeRawInputSink"),
+            WS_OVERLAPPED,
+            CW_USEDEFAULT,
+            CW_USEDEFAULT,
+            0,
+            0,
+            HWND_MESSAGE,
+            None,
+            instance,
+            None,
+        ) {
+            Ok(hwnd) => hwnd,
+            Err(error) => {
+                *state.last_error.lock().unwrap() =
+                    Some(format!("Failed to create Windows raw input message window: {error}"));
+                return;
+            }
+        };
+
+        if hwnd.0.is_null() {
+            *state.last_error.lock().unwrap() =
+                Some("Failed to create Windows raw input message window.".to_string());
+            return;
+        }
+
+        let raw_input_devices = [RAWINPUTDEVICE {
+            usUsagePage: 0x01,
+            usUsage: 0x06,
+            dwFlags: RIDEV_INPUTSINK,
+            hwndTarget: hwnd,
+        }];
+
+        if let Err(error) = RegisterRawInputDevices(
+            &raw_input_devices,
+            mem::size_of::<RAWINPUTDEVICE>() as u32,
+        ) {
+            *state.last_error.lock().unwrap() =
+                Some(format!("Failed to register Windows raw input keyboard: {error}"));
+            return;
+        }
+
+        append_log_line("[Shortcut] Windows raw input backend registered");
+
+        let mut message = MSG::default();
+        while {
+            let result = GetMessageW(&mut message, None, 0, 0);
+            if result.0 == -1 {
+                append_log_line("[Shortcut] GetMessageW error (-1); raw input loop exiting");
+                false
+            } else {
+                result.into()
+            }
+        } {
+            let _ = TranslateMessage(&message);
+            DispatchMessageW(&message);
+        }
+    });
+}
+
+fn update_pressed_keys(state: &Arc<HookSharedState>, vk: u16, message: u32) {
+    let mut pressed = state.pressed_keys.lock().unwrap();
+    match message {
+        WM_SYSKEYDOWN | WM_KEYDOWN => {
+            pressed.insert(vk);
+        }
+        WM_SYSKEYUP | WM_KEYUP => {
+            remove_released_key(&mut pressed, vk);
+        }
+        _ => {}
+    }
+}
+
+fn remove_released_key(pressed: &mut HashSet<u16>, vk: u16) {
+    for key in matching_modifier_group(vk).unwrap_or(&[vk]) {
+        pressed.remove(key);
+    }
+}
+
+fn matching_modifier_group(vk: u16) -> Option<&'static [u16]> {
+    match vk {
+        0x10 | 0xA0 | 0xA1 => Some(&[0x10, 0xA0, 0xA1]),
+        0x11 | 0xA2 | 0xA3 => Some(&[0x11, 0xA2, 0xA3]),
+        0x12 | 0xA4 | 0xA5 => Some(&[0x12, 0xA4, 0xA5]),
+        0x5B | 0x5C => Some(&[0x5B, 0x5C]),
+        _ => None,
+    }
+}
+
+fn is_key_event(message: u32) -> bool {
+    matches!(message, WM_SYSKEYDOWN | WM_KEYDOWN | WM_SYSKEYUP | WM_KEYUP)
+}
+
+fn binding_is_down(pressed: &HashSet<u16>, required_groups: &[Vec<u16>]) -> bool {
+    !required_groups.is_empty()
+        && required_groups
+            .iter()
+            .all(|group| group.iter().any(|key| pressed.contains(key)))
+}
+
+fn handle_binding_state(state: &Arc<HookSharedState>) {
+    let pressed = state.pressed_keys.lock().unwrap().clone();
+    let required_groups = state.required_groups.lock().unwrap().clone();
+    let binding_down = binding_is_down(&pressed, &required_groups);
+    let was_active = state.active.load(Ordering::SeqCst);
+
+    match (was_active, binding_down) {
+        (false, true) => {
+            state.active.store(true, Ordering::SeqCst);
+            let binding_label = state.binding_label.lock().unwrap().clone();
+            send_shortcut_command(state, ShortcutCommand::Start { binding_label });
+        }
+        (true, false) => {
+            state.active.store(false, Ordering::SeqCst);
+            let binding_label = state.binding_label.lock().unwrap().clone();
+            send_shortcut_command(state, ShortcutCommand::Stop { binding_label });
+            state.pressed_keys.lock().unwrap().clear();
+        }
+        _ => {}
+    }
+}
+
+fn send_shortcut_command(state: &Arc<HookSharedState>, command: ShortcutCommand) {
+    let is_start = matches!(command, ShortcutCommand::Start { .. });
+    let sender = state.command_sender.lock().unwrap().clone();
+    if let Some(sender) = sender {
+        if let Err(error) = sender.send(command) {
+            append_log_line(&format!("[Shortcut] command dispatch failed: {error}"));
+            if is_start {
+                state.active.store(false, Ordering::SeqCst);
+            }
+        }
+    }
+}
+
+fn start_overlay_session(state: &Arc<HookSharedState>) {
+    if let Some(app_handle) = state.app_handle.lock().unwrap().clone() {
+        if let Err(error) = crate::start_recording_internal(&app_handle, "windows-raw-input") {
+            append_log_line(&format!("[Shortcut] start failed: {error}"));
+            state.active.store(false, Ordering::SeqCst);
+        }
+    }
+}
+
+fn stop_overlay_session(state: &Arc<HookSharedState>) {
+    if let Some(app_handle) = state.app_handle.lock().unwrap().clone() {
+        if let Err(error) = crate::stop_recording_internal(&app_handle, "windows-raw-input") {
+            append_log_line(&format!("[Shortcut] stop failed: {error}"));
+        }
+    }
+}
+
+unsafe extern "system" fn raw_input_window_proc(
+    hwnd: HWND,
+    message: u32,
+    w_param: WPARAM,
+    l_param: LPARAM,
+) -> LRESULT {
+    if message == WM_INPUT {
+        process_raw_keyboard_input(HRAWINPUT(l_param.0 as *mut _));
+        return LRESULT(0);
+    }
+
+    DefWindowProcW(hwnd, message, w_param, l_param)
+}
+
+unsafe fn process_raw_keyboard_input(raw_input_handle: HRAWINPUT) {
+    let mut size = 0_u32;
+    let header_size = mem::size_of::<RAWINPUTHEADER>() as u32;
+
+    let _ = GetRawInputData(raw_input_handle, RID_INPUT, None, &mut size, header_size);
+    if size == 0 {
+        return;
+    }
+
+    let mut buffer = vec![0_u8; size as usize];
+    let read = GetRawInputData(
+        raw_input_handle,
+        RID_INPUT,
+        Some(buffer.as_mut_ptr().cast()),
+        &mut size,
+        header_size,
+    );
+    if read == u32::MAX {
+        return;
+    }
+
+    let raw_input = ptr::read_unaligned(buffer.as_ptr().cast::<RAWINPUT>());
+    if raw_input.header.dwType != RIM_TYPEKEYBOARD.0 {
+        return;
+    }
+
+    let keyboard = raw_input.data.keyboard;
+    let vk = keyboard.VKey as u16;
+    let message = keyboard.Message;
+    if !is_key_event(message) {
+        return;
+    }
+
+    let state = shared_state();
+    update_pressed_keys(&state, vk, message);
+    handle_binding_state(&state);
+}
+
+#[allow(dead_code)]
+fn binding_matches(pressed: &HashSet<u16>, groups: &[Vec<u16>]) -> bool {
+    if groups.is_empty() {
+        return false;
+    }
+
+    groups
+        .iter()
+        .all(|group| group.iter().any(|key| pressed.contains(key)))
+}
+
+#[allow(dead_code)]
+fn is_modifier_vk(vk: u16) -> bool {
+    matches!(vk, 0x10 | 0x11 | 0x12 | 0xA0 | 0xA1 | 0xA2 | 0xA3 | 0xA4 | 0xA5 | 0x5B | 0x5C)
+}
+
+#[allow(dead_code)]
+fn modifier_bits_for_binding(binding: &HotkeyBinding) -> u32 {
+    let mut bits = 0u32;
+    for token in &binding.tokens {
+        if let BindingToken::Modifier(value) = token {
+            bits |= match *value {
+                "Shift" => 0b001,
+                "Ctrl" => 0b010,
+                "Alt" => 0b100,
+                "Meta" => 0b1000,
+                _ => 0,
+            };
+        }
+    }
+    bits
+}
+
+fn vk_groups_for_binding(binding: &HotkeyBinding) -> Result<Vec<Vec<u16>>, String> {
+    binding
+        .tokens
+        .iter()
+        .map(|token| match token {
+            BindingToken::Modifier("Ctrl") => Ok(vec![0x11, 0xA2, 0xA3]),
+            BindingToken::Modifier("Shift") => Ok(vec![0x10, 0xA0, 0xA1]),
+            BindingToken::Modifier("Alt") => Ok(vec![0x12, 0xA4, 0xA5]),
+            BindingToken::Modifier("Meta") => Ok(vec![0x5B, 0x5C]),
+            BindingToken::Modifier(other) => Err(format!("Unsupported modifier: {}", other)),
+            BindingToken::Key(value) => key_to_vk_group(value),
+            BindingToken::Mouse(value) => mouse_to_vk_group(value),
+            BindingToken::Vendor(_) => {
+                Err("Vendor-specific buttons need the upcoming native backend.".to_string())
+            }
+        })
+        .collect()
+}
+
+fn mouse_to_vk_group(value: &str) -> Result<Vec<u16>, String> {
+    let upper = value.to_uppercase();
+    let group = match upper.as_str() {
+        "MOUSELEFT" => vec![0x01],
+        "MOUSERIGHT" => vec![0x02],
+        "MOUSEMIDDLE" => vec![0x04],
+        "MOUSE4" => vec![0x05],
+        "MOUSE5" => vec![0x06],
+        _ => return Err(format!("Unsupported mouse button: {}", value)),
+    };
+
+    Ok(group)
+}
+
+fn key_to_vk_group(value: &str) -> Result<Vec<u16>, String> {
+    let upper = value.to_uppercase();
+    let group = match upper.as_str() {
+        "EQUAL" | "PLUS" => vec![0xBB],
+        "MINUS" => vec![0xBD],
+        "BRACKETLEFT" => vec![0xDB],
+        "BRACKETRIGHT" => vec![0xDD],
+        "BACKSLASH" => vec![0xDC],
+        "SEMICOLON" => vec![0xBA],
+        "QUOTE" => vec![0xDE],
+        "COMMA" => vec![0xBC],
+        "PERIOD" => vec![0xBE],
+        "SLASH" => vec![0xBF],
+        "BACKQUOTE" => vec![0xC0],
+        "PRINTSCREEN" => vec![0x2C],
+        "SCROLLLOCK" => vec![0x91],
+        "PAUSE" => vec![0x13],
+        "INSERT" => vec![0x2D],
+        "DELETE" => vec![0x2E],
+        "HOME" => vec![0x24],
+        "END" => vec![0x23],
+        "PAGEUP" => vec![0x21],
+        "PAGEDOWN" => vec![0x22],
+        "CONTEXTMENU" => vec![0x5D],
+        "BROWSERBACK" => vec![0xA6],
+        "BROWSERFORWARD" => vec![0xA7],
+        "BROWSERREFRESH" => vec![0xA8],
+        "BROWSERSTOP" => vec![0xA9],
+        "BROWSERSEARCH" => vec![0xAA],
+        "BROWSERFAVORITES" => vec![0xAB],
+        "BROWSERHOME" => vec![0xAC],
+        "AUDIOVOLUMEMUTE" => vec![0xAD],
+        "AUDIOVOLUMEDOWN" => vec![0xAE],
+        "AUDIOVOLUMEUP" => vec![0xAF],
+        "MEDIATRACKNEXT" => vec![0xB0],
+        "MEDIATRACKPREVIOUS" => vec![0xB1],
+        "MEDIASTOP" => vec![0xB2],
+        "MEDIAPLAYPAUSE" => vec![0xB3],
+        "LAUNCHMAIL" => vec![0xB4],
+        "LAUNCHAPP1" => vec![0xB6],
+        "LAUNCHAPP2" => vec![0xB7],
+        "SLEEP" => vec![0x5F],
+        "WAKEUP" => vec![0x5F],
+        "ARROWUP" | "UP" => vec![0x26],
+        "ARROWDOWN" | "DOWN" => vec![0x28],
+        "ARROWLEFT" | "LEFT" => vec![0x25],
+        "ARROWRIGHT" | "RIGHT" => vec![0x27],
+        "SPACE" => vec![0x20],
+        "ENTER" => vec![0x0D],
+        "ESCAPE" => vec![0x1B],
+        "TAB" => vec![0x09],
+        "BACKSPACE" => vec![0x08],
+        "NUMPAD0" => vec![0x60],
+        "NUMPAD1" => vec![0x61],
+        "NUMPAD2" => vec![0x62],
+        "NUMPAD3" => vec![0x63],
+        "NUMPAD4" => vec![0x64],
+        "NUMPAD5" => vec![0x65],
+        "NUMPAD6" => vec![0x66],
+        "NUMPAD7" => vec![0x67],
+        "NUMPAD8" => vec![0x68],
+        "NUMPAD9" => vec![0x69],
+        "NUMPADADD" => vec![0x6B],
+        "NUMPADSUBTRACT" => vec![0x6D],
+        "NUMPADMULTIPLY" => vec![0x6A],
+        "NUMPADDIVIDE" => vec![0x6F],
+        "NUMPADDECIMAL" => vec![0x6E],
+        "NUMPADENTER" => vec![0x0D],
+        key if key.starts_with('F') => {
+            let number = key
+                .trim_start_matches('F')
+                .parse::<u16>()
+                .map_err(|_| format!("Unsupported function key: {}", value))?;
+            if !(1..=24).contains(&number) {
+                return Err(format!("Unsupported function key: {}", value));
+            }
+            vec![0x6F + number]
+        }
+        key if key.len() == 1 => {
+            let character = key.chars().next().unwrap();
+            if character.is_ascii_alphabetic() || character.is_ascii_digit() {
+                vec![character as u16]
+            } else {
+                return Err(format!("Unsupported key: {}", value));
+            }
+        }
+        _ => return Err(format!("Unsupported key: {}", value)),
+    };
+
+    Ok(group)
+}
+
+impl HotkeyBackend for WindowsHookHotkeyBackend {
+    fn backend_name(&self) -> &'static str {
+        "windows-raw-input"
+    }
+
+    fn info(&self) -> HotkeyBackendInfo {
+        HotkeyBackendInfo {
+            backend_name: self.backend_name().to_string(),
+            platform: std::env::consts::OS.to_string(),
+            backend_tier: "native".to_string(),
+            planned_native_backend: None,
+            supports_modifier_only: true,
+            supports_function_keys: true,
+            supports_navigation_keys: true,
+            supports_mouse_buttons: true,
+            supports_vendor_keys: false,
+            requires_accessibility_permission: false,
+            required_permission_name: None,
+            permission_hint: None,
+            supported_examples: vec![
+                "Ctrl+Shift".to_string(),
+                "PrintScreen".to_string(),
+                "Pause".to_string(),
+                "Ctrl+Alt+Equal".to_string(),
+                "Mouse4".to_string(),
+                "Ctrl+Mouse5".to_string(),
+                "MediaPlayPause".to_string(),
+                "BrowserBack".to_string(),
+            ],
+            unsupported_examples: vec![
+                "Fn".to_string(),
+                "VendorButton1".to_string(),
+                "Custom keyboard macro key exposed as Unidentified".to_string(),
+            ],
+            notes: vec![
+                "Uses a Windows Raw Input backend with RIDEV_INPUTSINK.".to_string(),
+                "Alt is tracked via WM_SYSKEY* and VK_MENU / VK_LMENU / VK_RMENU state updates.".to_string(),
+                "Supports modifier-only chords, function keys, many navigation/system keys, and standard mouse buttons.".to_string(),
+                "Vendor-specific buttons are still planned but not wired yet.".to_string(),
+            ],
+        }
+    }
+
+    fn set_binding(&self, app: &AppHandle, binding: &str) -> Result<String, String> {
+        let state = shared_state();
+        let binding = HotkeyBinding::parse(binding)?;
+        let groups = vk_groups_for_binding(&binding)?;
+
+        *state.binding_label.lock().unwrap() = binding.to_string();
+        *state.required_groups.lock().unwrap() = groups;
+        *state.pressed_keys.lock().unwrap() = HashSet::new();
+        state.active.store(false, Ordering::SeqCst);
+        *state.app_handle.lock().unwrap() = Some(app.clone());
+        append_log_line(&format!("[Shortcut] registered: {}", binding));
+
+        if let Some(error) = state.last_error.lock().unwrap().clone() {
+            return Err(error);
+        }
+
+        Ok(binding.to_string())
+    }
+}

@@ -28,4 +28,7 @@ supabase/.temp
 *.sln
 *.sw?
 .playwright-mcp/
+<<<<<<< HEAD
 .codegraph/
+=======
+>>>>>>> 76c0a9ef47068d3322c0f3d617003f87660d788a

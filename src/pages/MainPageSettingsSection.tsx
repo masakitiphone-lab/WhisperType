@@ -12,7 +12,10 @@ import { DEFAULT_TRANSCRIPTION_PROMPT, ENGLISH_TRANSCRIPTION_PROMPT, JAPANESE_TR
 import { MainPageOverlaySettings } from "@/pages/MainPageOverlaySettings";
 import { GLASS_CARD, GLASS_PANEL } from "@/pages/mainPageTypes";
 import type { HotkeyBackendInfo, UiCopy } from "@/pages/settingsPageData";
+<<<<<<< HEAD
 import { getGroqApiKey, setGroqApiKey } from "@/services/transcription";
+=======
+>>>>>>> 76c0a9ef47068d3322c0f3d617003f87660d788a
 
 type AudioInput = {
   deviceId: string;
@@ -77,12 +80,15 @@ export function MainPageSettingsSection({
   const micTestLevelBars = 44;
   const micTestActiveBars = Math.round(micTestLevel * micTestLevelBars);
   const [recentLogs, setRecentLogs] = useState<string[]>([]);
+<<<<<<< HEAD
   const [groqApiKey, setGroqApiKeyState] = useState("");
   const [groqKeyStatus, setGroqKeyStatus] = useState("");
 
   useEffect(() => {
     void getGroqApiKey().then(setGroqApiKeyState).catch(() => {});
   }, []);
+=======
+>>>>>>> 76c0a9ef47068d3322c0f3d617003f87660d788a
 
   useEffect(() => {
     let active = true;
@@ -118,6 +124,7 @@ export function MainPageSettingsSection({
       <Card className={GLASS_CARD}>
         <CardContent className="space-y-4 pt-6">
           <div className={GLASS_PANEL + " p-4"}>
+<<<<<<< HEAD
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Groq API key</p>
             <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">
               {appLocale === "ja" ? "キーはこの端末の安全なストレージにのみ保存され、Groqへ直接送信されます。" : "Stored only in this device's secure storage and sent directly to Groq."}
@@ -137,6 +144,8 @@ export function MainPageSettingsSection({
             {groqKeyStatus ? <p className="mt-2 text-xs text-emerald-600">{groqKeyStatus}</p> : null}
           </div>
           <div className={GLASS_PANEL + " p-4"}>
+=======
+>>>>>>> 76c0a9ef47068d3322c0f3d617003f87660d788a
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
               {appLocale === "ja" ? "ショートカットキー" : "Shortcut key"}
             </p>

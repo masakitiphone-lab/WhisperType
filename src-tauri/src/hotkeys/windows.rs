@@ -306,39 +306,6 @@ unsafe fn process_raw_keyboard_input(raw_input_handle: HRAWINPUT) {
     handle_binding_state(&state);
 }
 
-#[allow(dead_code)]
-fn binding_matches(pressed: &HashSet<u16>, groups: &[Vec<u16>]) -> bool {
-    if groups.is_empty() {
-        return false;
-    }
-
-    groups
-        .iter()
-        .all(|group| group.iter().any(|key| pressed.contains(key)))
-}
-
-#[allow(dead_code)]
-fn is_modifier_vk(vk: u16) -> bool {
-    matches!(vk, 0x10 | 0x11 | 0x12 | 0xA0 | 0xA1 | 0xA2 | 0xA3 | 0xA4 | 0xA5 | 0x5B | 0x5C)
-}
-
-#[allow(dead_code)]
-fn modifier_bits_for_binding(binding: &HotkeyBinding) -> u32 {
-    let mut bits = 0u32;
-    for token in &binding.tokens {
-        if let BindingToken::Modifier(value) = token {
-            bits |= match *value {
-                "Shift" => 0b001,
-                "Ctrl" => 0b010,
-                "Alt" => 0b100,
-                "Meta" => 0b1000,
-                _ => 0,
-            };
-        }
-    }
-    bits
-}
-
 fn vk_groups_for_binding(binding: &HotkeyBinding) -> Result<Vec<Vec<u16>>, String> {
     binding
         .tokens

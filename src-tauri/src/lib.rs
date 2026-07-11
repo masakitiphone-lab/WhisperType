@@ -378,16 +378,6 @@ async fn transcribe_request(
     }
     let endpoint_url = Url::parse("https://api.groq.com/openai/v1/audio/transcriptions")
         .map_err(|error| error.to_string())?;
-    let file_size = file_bytes.len();
-    let has_language = language
-        .as_ref()
-        .map(|value| !value.trim().is_empty() && value != "auto")
-        .unwrap_or(false);
-    let has_prompt = prompt
-        .as_ref()
-        .map(|value| !value.trim().is_empty())
-        .unwrap_or(false);
-    let _ = (file_size, has_language, has_prompt);
     let mut form = multipart::Form::new().part(
         "file",
         multipart::Part::bytes(file_bytes)
@@ -441,7 +431,6 @@ fn clear_recent_logs() {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     env_logger::init();
-    let startup_at = std::time::Instant::now();
 
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
@@ -542,7 +531,6 @@ pub fn run() {
             ensure_windows_autostart().ok();
             ensure_macos_autostart().ok();
 
-            let _ = startup_at;
             Ok(())
         })
         .run(tauri::generate_context!())

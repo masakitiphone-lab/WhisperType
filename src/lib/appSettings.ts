@@ -66,12 +66,8 @@ export function readAppSettings(): AppSettings {
     }
 
     const parsed = JSON.parse(raw) as Record<string, unknown>;
-    const onboardingCompleted =
-      parsed.onboardingCompleted === true ||
-      (Array.isArray(parsed.onboardingCompletedUserIds) && (parsed.onboardingCompletedUserIds as unknown[]).length > 0);
-    const tutorialCompleted =
-      parsed.tutorialCompleted === true ||
-      (Array.isArray(parsed.tutorialCompletedUserIds) && (parsed.tutorialCompletedUserIds as unknown[]).length > 0);
+    const onboardingCompleted = parsed.onboardingCompleted === true;
+    const tutorialCompleted = parsed.tutorialCompleted === true;
 
     const hotkey =
       typeof parsed.hotkey === "string" && parsed.hotkey.trim().length > 0
@@ -146,15 +142,4 @@ export function writeAppSettings(nextSettings: Partial<AppSettings>) {
   );
 }
 
-export const DEFAULT_OVERLAY_SCALE = 1;
 
-export function readAppOverlayScale() {
-  const value = readAppSettings().overlayScale ?? DEFAULT_OVERLAY_SCALE;
-  return Math.min(2, Math.max(0.8, value));
-}
-
-export function writeAppOverlayScale(scale: number) {
-  writeAppSettings({
-    overlayScale: Math.min(2, Math.max(0.8, scale)),
-  });
-}

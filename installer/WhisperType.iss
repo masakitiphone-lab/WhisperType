@@ -2,8 +2,8 @@
 #define MyAppVersion "0.1.0"
 #define MyAppPublisher "WhisperType"
 #define MyAppExeName "whisper-type.exe"
-#define MyAppSourceExe "C:\Users\Masaya Kitagawa\APP DEV\whisper-type\src-tauri\target\release\whisper-type.exe"
-#define MyAppIcon "C:\Users\Masaya Kitagawa\APP DEV\whisper-type\src-tauri\icons\icon.ico"
+#define MyAppSourceExe SourcePath + "..\src-tauri\target\release\whisper-type.exe"
+#define MyAppIcon SourcePath + "..\src-tauri\icons\icon.ico"
 
 [Setup]
 AppId={{D08D4C79-4B4F-4D72-8E2A-8D9D5A39B961}

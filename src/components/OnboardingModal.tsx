@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Check, Globe2, Languages, Sparkles, Wand2 } from "lucide-react";
+import { Check, Globe2, KeyRound, Languages, Sparkles, Wand2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
@@ -18,13 +18,14 @@ type OnboardingResult = {
   language: TranscriptionLanguage;
   model: TranscriptionModel;
   prompt: string;
+  groqApiKey: string;
 };
 
 type Copy = {
   eyebrow: string;
   title: string;
   description: string;
-  steps: [string, string, string];
+  steps: [string, string, string, string];
   next: string;
   back: string;
   finish: string;
@@ -36,6 +37,12 @@ type Copy = {
   modelDescription: string;
   preset: string;
   presetDescription: string;
+  groqApiKey: string;
+  groqApiKeyDescription: string;
+  groqApiKeyPlaceholder: string;
+  groqApiKeyHelper: string;
+  groqApiKeyRequired: string;
+  groqApiKeyInvalid: string;
   turbo: string;
   full: string;
   auto: string;
@@ -52,7 +59,7 @@ function getCopy(locale: AppLocale): Copy {
       eyebrow: "QUICK SETUP",
       title: "最初の設定を整えましょう",
       description: "よく使う設定だけ先に選んでおくと、WhisperType をすぐに使い始められます。",
-      steps: ["表示言語", "文字起こし設定", "プリセット"],
+      steps: ["Groq API キー", "表示言語", "文字起こし設定", "プリセット"],
       next: "次へ",
       back: "戻る",
       finish: "この設定で始める",
@@ -64,6 +71,12 @@ function getCopy(locale: AppLocale): Copy {
       modelDescription: "速度重視か、精度重視かを選べます。",
       preset: "プリセット",
       presetDescription: "文章の雰囲気や固有名詞に合わせた初期設定です。",
+      groqApiKey: "Groq API キー",
+      groqApiKeyDescription: "文字起こしには Groq の API キーが必要です。",
+      groqApiKeyPlaceholder: "gsk_...",
+      groqApiKeyHelper: "キーはこの端末の安全なストレージにのみ保存され、Groq へ直接送信されます。",
+      groqApiKeyRequired: "Groq API キーを入力してください。",
+      groqApiKeyInvalid: "キーは gsk_ で始まる必要があります。",
       turbo: "Turbo: 速度重視",
       full: "Full: 精度重視",
       auto: "自動",
@@ -80,7 +93,7 @@ function getCopy(locale: AppLocale): Copy {
       eyebrow: "QUICK SETUP",
       title: "Configura lo esencial",
       description: "Elige solo lo importante una vez para empezar a usar WhisperType de inmediato.",
-      steps: ["Idioma", "Transcripcion", "Preset"],
+      steps: ["Clave API de Groq", "Idioma", "Transcripcion", "Preset"],
       next: "Siguiente",
       back: "Atras",
       finish: "Empezar con esta configuracion",
@@ -92,6 +105,12 @@ function getCopy(locale: AppLocale): Copy {
       modelDescription: "Elige entre velocidad y precision.",
       preset: "Preset",
       presetDescription: "Aplica una configuracion inicial para nombres y estilo.",
+      groqApiKey: "Clave API de Groq",
+      groqApiKeyDescription: "Se necesita una clave API de Groq para transcribir.",
+      groqApiKeyPlaceholder: "gsk_...",
+      groqApiKeyHelper: "La clave se guarda solo en el almacenamiento seguro de este dispositivo y se envia directamente a Groq.",
+      groqApiKeyRequired: "Introduce tu clave API de Groq.",
+      groqApiKeyInvalid: "La clave debe comenzar con gsk_.",
       turbo: "Turbo: prioriza velocidad",
       full: "Full: prioriza precision",
       auto: "Auto",
@@ -107,7 +126,7 @@ function getCopy(locale: AppLocale): Copy {
     eyebrow: "QUICK SETUP",
     title: "Set up the basics",
     description: "Choose the essentials once so WhisperType feels ready from the start.",
-    steps: ["Language", "Transcription", "Preset"],
+    steps: ["Groq API key", "Language", "Transcription", "Preset"],
     next: "Next",
     back: "Back",
     finish: "Start with these settings",
@@ -119,6 +138,12 @@ function getCopy(locale: AppLocale): Copy {
     modelDescription: "Choose between speed and accuracy.",
     preset: "Preset",
     presetDescription: "Apply a starter prompt for names and writing style.",
+    groqApiKey: "Groq API key",
+    groqApiKeyDescription: "A Groq API key is required for transcription.",
+    groqApiKeyPlaceholder: "gsk_...",
+    groqApiKeyHelper: "Stored only in this device's secure storage and sent directly to Groq.",
+    groqApiKeyRequired: "Enter your Groq API key.",
+    groqApiKeyInvalid: "The key must start with gsk_.",
     turbo: "Turbo: prioritize speed",
     full: "Full: prioritize accuracy",
     auto: "Auto",
@@ -195,7 +220,25 @@ export default function OnboardingModal({
   );
   const [model, setModel] = useState<TranscriptionModel>("whisper-large-v3");
   const [preset, setPreset] = useState<PresetMode>(initialLocale === "ja" ? "japanese" : "english");
+  const [groqApiKey, setGroqApiKeyState] = useState("");
+  const [groqApiKeyError, setGroqApiKeyError] = useState("");
   const copy = useMemo(() => getCopy(selectedLocale), [selectedLocale]);
+
+  const handleNext = () => {
+    if (step === 0) {
+      const key = groqApiKey.trim();
+      if (!key) {
+        setGroqApiKeyError(copy.groqApiKeyRequired);
+        return;
+      }
+      if (!key.startsWith("gsk_")) {
+        setGroqApiKeyError(copy.groqApiKeyInvalid);
+        return;
+      }
+      setGroqApiKeyError("");
+    }
+    setStep((current) => Math.min(3, current + 1));
+  };
 
   return (
     <div className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-950/34 px-4 py-6 backdrop-blur-sm">
@@ -217,6 +260,33 @@ export default function OnboardingModal({
 
         <CardContent className="space-y-5 px-6 py-6">
           {step === 0 ? (
+            <div className="rounded-[24px] border border-black/6 bg-[#fbfaf7] p-5">
+              <div className="flex items-start gap-3">
+                <KeyRound className="mt-1 h-5 w-5 text-slate-600" />
+                <div className="min-w-0 flex-1 space-y-3">
+                  <div>
+                    <p className="text-sm font-semibold text-slate-950">{copy.groqApiKey}</p>
+                    <p className="text-sm leading-6 text-slate-600">{copy.groqApiKeyDescription}</p>
+                  </div>
+                  <input
+                    type="password"
+                    value={groqApiKey}
+                    onChange={(event) => {
+                      setGroqApiKeyState(event.target.value);
+                      setGroqApiKeyError("");
+                    }}
+                    placeholder={copy.groqApiKeyPlaceholder}
+                    autoFocus
+                    className="w-full rounded-xl border border-black/10 bg-white px-4 py-2.5 text-sm outline-none transition placeholder:text-slate-400 focus:border-slate-400 focus:ring-2 focus:ring-slate-200"
+                  />
+                  <p className="text-xs leading-5 text-slate-500">{copy.groqApiKeyHelper}</p>
+                  {groqApiKeyError ? <p className="text-xs font-medium text-red-600">{groqApiKeyError}</p> : null}
+                </div>
+              </div>
+            </div>
+          ) : null}
+
+          {step === 1 ? (
             <div className="rounded-[24px] border border-black/6 bg-[#fbfaf7] p-5">
               <div className="flex items-start gap-3">
                 <Globe2 className="mt-1 h-5 w-5 text-slate-600" />
@@ -244,7 +314,7 @@ export default function OnboardingModal({
             </div>
           ) : null}
 
-          {step === 1 ? (
+          {step === 2 ? (
             <div className="grid gap-4 md:grid-cols-2">
               <div className="rounded-[24px] border border-black/6 bg-[#fbfaf7] p-5">
                 <div className="flex items-start gap-3">
@@ -299,7 +369,7 @@ export default function OnboardingModal({
             </div>
           ) : null}
 
-          {step === 2 ? (
+          {step === 3 ? (
             <div className="rounded-[24px] border border-black/6 bg-[#fbfaf7] p-5">
               <div className="flex items-start gap-3">
                 <Wand2 className="mt-1 h-5 w-5 text-slate-600" />
@@ -336,11 +406,11 @@ export default function OnboardingModal({
               {copy.back}
             </Button>
 
-            {step < 2 ? (
+            {step < 3 ? (
               <Button
                 type="button"
                 className="rounded-2xl px-5"
-                onClick={() => setStep((current) => Math.min(2, current + 1))}
+                onClick={handleNext}
               >
                 {copy.next}
               </Button>
@@ -354,6 +424,7 @@ export default function OnboardingModal({
                     language,
                     model,
                     prompt: getPromptForPreset(preset),
+                    groqApiKey,
                   })
                 }
               >

@@ -7,6 +7,7 @@ import OnboardingModal from "@/components/OnboardingModal";
 import TutorialPracticeModal from "@/components/TutorialPracticeModal";
 import { invoke } from "@tauri-apps/api/core";
 import { normalizeHotkeyForDisplay, normalizeHotkeyForNative } from "@/lib/hotkeys";
+import { setGroqApiKey } from "@/services/transcription";
 
 export default function App() {
   const [locale, setLocale] = useState<AppLocale>(() => readAppLocale());
@@ -52,7 +53,11 @@ export default function App() {
     language: Parameters<typeof writeAppSettings>[0]["language"];
     model: Parameters<typeof writeAppSettings>[0]["model"];
     prompt: string;
+    groqApiKey: string;
   }) => {
+    void setGroqApiKey(result.groqApiKey).catch((error) => {
+      console.warn("Failed to save Groq API key from onboarding:", error);
+    });
     writeAppSettings({
       appLocale: result.appLocale,
       language: result.language,

@@ -104,7 +104,6 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           gh release create "${{ github.ref_name }}" \
-            "$(find release-assets -type f | tr '\n' ' ')" \
             --title "WhisperType ${{ github.ref_name }}" \
             --notes "Automated release build.
 
@@ -114,3 +113,7 @@ jobs:
             - macOS Apple Silicon: DMG (\`aarch64\`)
 
             Installers are unsigned. Windows may show a SmartScreen warning and macOS may show a Gatekeeper warning."
+          find release-assets -type f \( -name "*.exe" -o -name "*.dmg" \) -print0 | while IFS= read -r -d '' file; do
+            echo "Uploading $file"
+            gh release upload "${{ github.ref_name }}" "$file" --clobber
+          done

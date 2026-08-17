@@ -158,7 +158,8 @@ fn event_tap_symbols_available() -> bool {
 
 fn native_runtime_status_label() -> String {
     let state = shared_native_state();
-    state.runtime_status.lock().unwrap().clone()
+    let status = state.runtime_status.lock().unwrap();
+    status.clone()
 }
 
 pub fn macos_native_runtime_status_label() -> String {
@@ -540,7 +541,8 @@ fn update_native_input_snapshot(
 
 fn current_binding_is_active() -> bool {
     let state = shared_native_state();
-    *state.binding_is_active.lock().unwrap()
+    let is_active = state.binding_is_active.lock().unwrap();
+    *is_active
 }
 
 fn emit_native_binding_transition() {

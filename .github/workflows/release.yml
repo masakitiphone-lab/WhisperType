@@ -14,7 +14,7 @@ permissions:
   contents: write
 
 jobs:
-  release:
+  build:
     runs-on: ${{ matrix.platform }}
     strategy:
       fail-fast: false
@@ -23,12 +23,15 @@ jobs:
           - platform: windows-latest
             args: "--bundles nsis"
             rust_target: ""
+            artifact_name: windows
           - platform: macos-14
             args: "--bundles dmg --target x86_64-apple-darwin"
             rust_target: "x86_64-apple-darwin"
+            artifact_name: macos-x86_64
           - platform: macos-14
             args: "--bundles dmg --target aarch64-apple-darwin"
             rust_target: "aarch64-apple-darwin"
+            artifact_name: macos-aarch64
     steps:
       - uses: actions/checkout@v4
 
@@ -69,22 +72,42 @@ jobs:
           workspaces: src-tauri
           key: ${{ matrix.rust_target || 'windows' }}
 
-      - name: Build and upload to GitHub Releases
-        uses: tauri-apps/tauri-action@v0
+      - name: Build Tauri app
+        run: pnpm tauri build ${{ matrix.args }}
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: whisper-type-${{ matrix.artifact_name }}
+          path: |
+            src-tauri/target/**/release/bundle/nsis/*.exe
+            src-tauri/target/**/release/bundle/dmg/*.dmg
+          if-no-files-found: error
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+          merge-multiple: true
+
+      - name: Create GitHub Release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tagName: ${{ github.ref_name }}
-          releaseName: "WhisperType ${{ github.ref_name }}"
-          releaseBody: |
-            Automated release build.
+        run: |
+          gh release create "${{ github.ref_name }}" \
+            release-assets/* \
+            --title "WhisperType ${{ github.ref_name }}" \
+            --notes "Automated release build.
 
             Download the installer for your platform:
-            - Windows: NSIS setup (`.exe`)
-            - macOS Intel: DMG (`x86_64`)
-            - macOS Apple Silicon: DMG (`aarch64`)
+            - Windows: NSIS setup (\`.exe\`)
+            - macOS Intel: DMG (\`x86_64\`)
+            - macOS Apple Silicon: DMG (\`aarch64\`)
 
-            Installers are unsigned. Windows may show a SmartScreen warning and macOS may show a Gatekeeper warning.
-          releaseDraft: true
-          prerelease: false
-          args: ${{ matrix.args }}
+            Installers are unsigned. Windows may show a SmartScreen warning and macOS may show a Gatekeeper warning."

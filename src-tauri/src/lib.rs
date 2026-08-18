@@ -359,6 +359,13 @@ fn type_text(_app: AppHandle, text: String, use_clipboard_paste: bool) -> Result
 }
 
 
+/// Request timeout scales with the audio size. The processed webm is roughly
+/// 6 KB/s of audio (48 kbps opus), so `bytes / 3000` gives ~2x the audio
+/// duration as slack on top of a 30s base, capped at 5 minutes.
+fn transcription_timeout_secs(file_bytes: usize) -> u64 {
+    (30 + file_bytes / 3000).clamp(30, 300) as u64
+}
+
 #[tauri::command]
 async fn transcribe_request(
     groq_api_key: String,
@@ -370,7 +377,7 @@ async fn transcribe_request(
     prompt: Option<String>,
 ) -> Result<String, String> {
     let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(30))
+        .timeout(std::time::Duration::from_secs(transcription_timeout_secs(file_bytes.len())))
         .build()
         .map_err(|error| error.to_string())?;
     if groq_api_key.trim().is_empty() {
@@ -414,10 +421,12 @@ async fn transcribe_request(
         append_log_line(&format!("[Transcription] Response text error: {}", error));
         error.to_string()
     })?;
+    // Only the status and body size are logged; the transcribed text itself is
+    // user content and must not be stored in the app's log buffer.
     append_log_line(&format!(
-        "[Transcription] Worker response status={} body={}",
+        "[Transcription] Worker response status={} body_chars={}",
         status.as_u16(),
-        body_text.chars().take(200).collect::<String>()
+        body_text.chars().count()
     ));
 
     if !status.is_success() {

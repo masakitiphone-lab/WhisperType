@@ -16,6 +16,15 @@ fn windows_target_name(key: &str) -> String {
     format!("{SECURE_STORAGE_SERVICE}:{key}")
 }
 
+// The previous keyring-based implementation (keyring 3.x) stored Windows
+// credentials under the target name `"<user>.<service>"`. The blob format is
+// the same UTF-16LE bytes we use today, so legacy entries can be read and
+// migrated without user action.
+#[cfg(target_os = "windows")]
+fn legacy_windows_target_name(key: &str) -> String {
+    format!("{key}.{SECURE_STORAGE_SERVICE}")
+}
+
 #[cfg(target_os = "windows")]
 fn windows_credential_get(target: &str) -> Result<Option<String>, String> {
     use std::ffi::OsStr;
@@ -129,7 +138,23 @@ pub fn secure_storage_get(key: String) -> Result<Option<String>, String> {
     {
         let target = windows_target_name(&key);
         append_log_line(&format!("[SecureStorage] get target={}", target));
-        return windows_credential_get(&target);
+        if let Some(value) = windows_credential_get(&target)? {
+            return Ok(Some(value));
+        }
+
+        // Migrate credentials stored under the old keyring target name so
+        // users keep their saved API key after upgrading.
+        let legacy_target = legacy_windows_target_name(&key);
+        if let Some(value) = windows_credential_get(&legacy_target)? {
+            append_log_line(&format!(
+                "[SecureStorage] migrating legacy entry from {}",
+                legacy_target
+            ));
+            let _ = windows_credential_set(&target, &value);
+            let _ = windows_credential_delete(&legacy_target);
+            return Ok(Some(value));
+        }
+        return Ok(None);
     }
 
     #[cfg(not(target_os = "windows"))]
@@ -195,6 +220,7 @@ pub fn secure_storage_delete(key: String) -> Result<(), String> {
     {
         let target = windows_target_name(&key);
         append_log_line(&format!("[SecureStorage] delete target={}", target));
+        let _ = windows_credential_delete(&legacy_windows_target_name(&key));
         return windows_credential_delete(&target);
     }
 

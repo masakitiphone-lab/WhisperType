@@ -10,6 +10,8 @@ import "./overlay.css";
 
 type ShowNoticeEvent = OverlayNoticePayload & { locale: string };
 
+const NOTICE_AUTO_DISMISS_MS = 4000;
+
 function NoticePage() {
   const [notice, setNotice] = React.useState<OverlayNoticeViewModel | null>(null);
   const [reduceMotion, setReduceMotion] = React.useState(false);
@@ -37,6 +39,17 @@ function NoticePage() {
       });
     });
     return () => cancelAnimationFrame(raf);
+  }, [notice]);
+
+  // Transient notices (errors) close themselves after a few seconds so the
+  // always-on-top notice window does not keep blocking clicks underneath.
+  React.useEffect(() => {
+    if (!notice || !notice.autoDismiss) return;
+    const dismissTimer = window.setTimeout(() => {
+      setNotice(null);
+      void invoke("hide_notice_window");
+    }, NOTICE_AUTO_DISMISS_MS);
+    return () => window.clearTimeout(dismissTimer);
   }, [notice]);
 
   const clear = () => {

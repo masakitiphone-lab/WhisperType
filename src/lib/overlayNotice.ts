@@ -78,7 +78,9 @@ export function buildOverlayNotice(locale: AppLocale, payload: OverlayNoticePayl
     closeLabel: labels.close,
     width: NOTICE_WIDTH,
     minHeight: ERROR_HEIGHT,
-    autoDismiss: false,
+    // Error notices are transient: they close on their own so the notice
+    // window does not keep blocking clicks on the apps beneath it.
+    autoDismiss: true,
   };
 }
 

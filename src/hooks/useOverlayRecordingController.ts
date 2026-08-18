@@ -16,7 +16,7 @@ import { useEstimatedTranscriptionProgress } from "@/hooks/useEstimatedTranscrip
 import { createEmptyWaveformLevels, startRecordingWaveformAnimation, type ActiveRecording, type CapsulePhase, type CapturePhase } from "@/hooks/overlayRecordingWaveform";
 import { assertRecordingHasSpeech, buildTranscriptionOverlayNotice, stopRecordingAndCreateBlob } from "@/hooks/overlayRecordingTranscription";
 import { attachOverlayRecordingEventListeners } from "@/hooks/overlayRecordingEvents";
-import { MAX_PENDING_PASTE_LENGTH, PasteFlushError, flushPastedTranscriptions, queueTranscriptionPaste } from "@/hooks/overlayRecordingPasteQueue";
+import { PasteFlushError, flushPastedTranscriptions, queueTranscriptionPaste } from "@/hooks/overlayRecordingPasteQueue";
 import {
   CAPSULE_COLLAPSE_DURATION,
   CAPSULE_EXPAND_DURATION,
@@ -294,12 +294,7 @@ export function useOverlayRecordingController() {
         const text = await transcribeAudio(transcribableBlob);
         transcriptionProgress.complete();
         queueTranscriptionPaste(pendingPasteTextRef, text);
-        setTranscriptionPreviewText((prev) => {
-          const next = prev ? `${prev} ${text}` : text;
-          return next.length > MAX_PENDING_PASTE_LENGTH
-            ? next.slice(-MAX_PENDING_PASTE_LENGTH)
-            : next;
-        });
+        setTranscriptionPreviewText((prev) => (prev ? `${prev} ${text}` : text));
         void invoke("emit_transcription_finished").catch(() => {});
         void prefetchTranscriptionReadiness().catch((err) => {
           console.warn("Post-transcription prefetch failed:", err);

@@ -25,8 +25,10 @@ export async function prefetchTranscriptionReadiness() {
 }
 
 export async function transcribeAudio(audioBlob: Blob): Promise<string> {
+  void invoke("log_to_terminal", { msg: `[JS] transcribeAudio enter size=${audioBlob.size}` }).catch(() => {});
   if (audioBlob.size === 0) throw new Error("silent_audio");
   const apiKey = await getGroqApiKey();
+  void invoke("log_to_terminal", { msg: `[JS] transcribeAudio apiKey=${apiKey ? "set" : "MISSING"}` }).catch(() => {});
   if (!apiKey) throw new Error("groq_api_key_missing");
 
   const processedBlob = await preprocessAudioBlobForTranscription(audioBlob);

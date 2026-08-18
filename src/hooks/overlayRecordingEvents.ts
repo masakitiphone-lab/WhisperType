@@ -51,6 +51,9 @@ export function attachOverlayRecordingEventListeners(
     unlistenTranscriptionPrefetch = transcriptionPrefetchListener;
 
     const recordingStoppedListener = await listen("recording-stopped", () => {
+      void invoke("log_to_terminal", {
+        msg: `[JS] recording-stopped received current=${refs.currentRecordingRef.current ? "yes" : "no"} isStarting=${refs.isStartingRef.current} phase=${refs.capturePhaseRef.current}`,
+      }).catch(() => {});
       if (!refs.currentRecordingRef.current) {
         if (refs.isStartingRef.current || refs.capturePhaseRef.current === "arming") {
           refs.pendingStopWhileStartingRef.current = true;
@@ -62,6 +65,9 @@ export function attachOverlayRecordingEventListeners(
       refs.recordingSessionActiveRef.current = false;
       refs.currentRecordingRef.current = null;
       handlers.beginTranscriptionTransition();
+      void invoke("log_to_terminal", {
+        msg: `[JS] recording-stopped: starting transcription job id=${finishedRecording.id} state=${finishedRecording.mediaRecorder.state} mime=${finishedRecording.mimeType}`,
+      }).catch(() => {});
       void handlers.processTranscriptionJob(finishedRecording);
     });
     if (isListenerSetupCancelled) {

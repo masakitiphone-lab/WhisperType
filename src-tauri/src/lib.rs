@@ -378,6 +378,12 @@ async fn transcribe_request(
     }
     let endpoint_url = Url::parse("https://api.groq.com/openai/v1/audio/transcriptions")
         .map_err(|error| error.to_string())?;
+    append_log_line(&format!(
+        "[Transcription] Request start file_bytes={} mime={} model={}",
+        file_bytes.len(),
+        file_mime_type,
+        model
+    ));
     let mut form = multipart::Form::new().part(
         "file",
         multipart::Part::bytes(file_bytes)
@@ -399,12 +405,19 @@ async fn transcribe_request(
         .bearer_auth(groq_api_key)
         .multipart(form);
 
-    let response = request.send().await.map_err(|error| error.to_string())?;
+    let response = request.send().await.map_err(|error| {
+        append_log_line(&format!("[Transcription] Request send error: {}", error));
+        error.to_string()
+    })?;
     let status = response.status();
-    let body_text = response.text().await.map_err(|error| error.to_string())?;
+    let body_text = response.text().await.map_err(|error| {
+        append_log_line(&format!("[Transcription] Response text error: {}", error));
+        error.to_string()
+    })?;
     append_log_line(&format!(
-        "[Transcription] Worker response status={}",
+        "[Transcription] Worker response status={} body={}",
         status.as_u16(),
+        body_text.chars().take(200).collect::<String>()
     ));
 
     if !status.is_success() {

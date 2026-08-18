@@ -318,6 +318,7 @@ pub fn detect_speech_with_vad(bytes: Vec<u8>) -> Result<VadDetectionResult, Stri
 
 #[tauri::command]
 pub fn process_audio_with_ffmpeg(bytes: Vec<u8>) -> Result<Vec<u8>, String> {
+    append_log_line(&format!("[FFmpeg] process_audio_with_ffmpeg enter bytes={}", bytes.len()));
     if !ffmpeg_available() {
         append_log_line("[FFmpeg] not found; returning original audio for transcription");
         return Ok(bytes);
@@ -329,6 +330,11 @@ pub fn process_audio_with_ffmpeg(bytes: Vec<u8>) -> Result<Vec<u8>, String> {
             return Ok(bytes);
         }
     };
+    append_log_line(&format!(
+        "[FFmpeg] decoded samples={} sample_rate={}",
+        samples.len(),
+        sample_rate_hz
+    ));
     if samples.is_empty() {
         append_log_line("[FFmpeg] decoded audio was empty; using original recording");
         return Ok(bytes);
@@ -389,5 +395,14 @@ pub fn process_audio_with_ffmpeg(bytes: Vec<u8>) -> Result<Vec<u8>, String> {
         ));
     }
 
-    fs::read(&output_path).map_err(|error| error.to_string())
+    append_log_line(&format!(
+        "[FFmpeg] re-encoded output_size={}",
+        output_path
+            .metadata()
+            .map(|m| m.len())
+            .unwrap_or_default()
+    ));
+    let result = fs::read(&output_path).map_err(|error| error.to_string());
+    append_log_line(&format!("[FFmpeg] process_audio_with_ffmpeg done result_bytes={:?}", result.as_ref().map(|v| v.len())));
+    result
 }

@@ -2,10 +2,10 @@ use tauri::{webview::Color, WebviewWindow};
 
 #[cfg(target_os = "windows")]
 use windows::Win32::{
-    Foundation::HWND,
+    Foundation::{BOOL, HWND, LPARAM},
     UI::WindowsAndMessaging::{
-        GetWindowLongPtrW, SetWindowLongPtrW, SetWindowPos, ShowWindow, GWL_EXSTYLE,
-        HWND_TOPMOST, SHOW_WINDOW_CMD, SWP_NOMOVE, SWP_NOSIZE, SWP_NOACTIVATE,
+        EnumChildWindows, GetWindowLongPtrW, SetWindowLongPtrW, SetWindowPos, ShowWindow,
+        GWL_EXSTYLE, HWND_TOPMOST, SHOW_WINDOW_CMD, SWP_NOMOVE, SWP_NOSIZE, SWP_NOACTIVATE,
         WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW, WS_EX_TRANSPARENT,
     },
 };
@@ -39,6 +39,9 @@ impl OverlayPosition {
 pub fn apply_overlay_visuals(window: &WebviewWindow) {
     let _ = window.set_shadow(false);
     let _ = window.set_background_color(Some(Color(0, 0, 0, 0)));
+    // Make the display-only overlay pass clicks through to the windows beneath it.
+    // macOS: NSWindow ignoresMouseEvents. Windows: WS_EX_TRANSPARENT on the window.
+    let _ = window.set_ignore_cursor_events(true);
     #[cfg(target_os = "windows")]
     apply_windows_no_activate_style(window);
     #[cfg(target_os = "windows")]
@@ -102,6 +105,21 @@ fn apply_windows_no_activate_style(window: &WebviewWindow) {
 }
 
 #[cfg(target_os = "windows")]
+unsafe fn apply_click_through_style(target: HWND) {
+    let current_style = GetWindowLongPtrW(target, GWL_EXSTYLE);
+    let next_style = current_style | WS_EX_TRANSPARENT.0 as isize;
+    if next_style != current_style {
+        let _ = SetWindowLongPtrW(target, GWL_EXSTYLE, next_style);
+    }
+}
+
+#[cfg(target_os = "windows")]
+unsafe extern "system" fn make_child_click_through(child: HWND, _lparam: LPARAM) -> BOOL {
+    apply_click_through_style(child);
+    BOOL(1)
+}
+
+#[cfg(target_os = "windows")]
 fn apply_windows_click_through(window: &WebviewWindow) {
     let Ok(hwnd) = window.hwnd() else {
         return;
@@ -109,11 +127,13 @@ fn apply_windows_click_through(window: &WebviewWindow) {
 
     unsafe {
         let hwnd = HWND(hwnd.0);
-        let current_style = GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
-        let next_style = current_style | WS_EX_TRANSPARENT.0 as isize;
-        if next_style != current_style {
-            let _ = SetWindowLongPtrW(hwnd, GWL_EXSTYLE, next_style);
-        }
+        // The top-level window must be transparent for hit testing...
+        apply_click_through_style(hwnd);
+        // ...and so must the WebView2 child windows. The WebView2 host creates child
+        // windows in a separate process, and those children are hit-tested before the
+        // parent, so WS_EX_TRANSPARENT on the top-level window alone does not let
+        // clicks through to the applications beneath the overlay.
+        let _ = EnumChildWindows(hwnd, Some(make_child_click_through), LPARAM(0));
     }
 }
 

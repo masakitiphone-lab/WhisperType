@@ -1,82 +1,128 @@
+<div align="center">
+
+<img src="public/app-icon.png" alt="WhisperType" width="96" />
+
 # WhisperType
 
-Desktop voice dictation for Windows and macOS. Hold the global shortcut, speak, and insert the transcription into the active application.
+**Desktop voice dictation for Windows and macOS.**
+
+Hold a global shortcut, speak, and the transcribed text is inserted
+into whatever application you are using — no accounts, no subscriptions,
+no cloud backend.
+
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS-lightgrey.svg)](#installation)
+[![Tauri v2](https://img.shields.io/badge/tauri-v2-24C8DB.svg)](https://v2.tauri.app)
+[![Rust](https://img.shields.io/badge/rust-stable-dea584.svg)](https://www.rust-lang.org)
+
+</div>
+
+---
+
+## Table of contents
+
+- [Features](#features)
+- [How it works](#how-it-works)
+- [Privacy & security](#privacy--security)
+- [Installation](#installation)
+- [Getting started](#getting-started)
+- [Usage](#usage)
+- [Development](#development)
+- [Contributing](#contributing)
+- [License](#license)
 
 ## Features
 
-- Global shortcut and recording overlay
-- Direct Groq Whisper-compatible transcription
-- Bring your own Groq API key (BYOK)
-- API key stored in the operating system keychain
-- Japanese, English, and Spanish interface
-- No account, hosted backend, subscription, or usage quota managed by WhisperType
+- **Global shortcut** — hold a key (or mouse button) from any application to start recording; release to transcribe and insert
+- **Transparent overlay** — a floating capsule shows recording state, a live waveform, and a **live transcription preview** as segments finish, without blocking the window beneath it (click-through)
+- **Direct Groq API** — audio goes straight from the native Rust backend to Groq's Whisper endpoint; no proxy, no cloud database
+- **Bring your own API key (BYOK)** — stored in the OS credential store (Windows Credential Manager / macOS Keychain), never in `.env` or localStorage
+- **Smart preprocessing** — WebRTC VAD filters silence, ffmpeg normalizes volume and converts to the optimal format before the request
+- **Automatic insertion** — text is pasted at the cursor via `Ctrl+V` / `Cmd+V`, split into chunks for long dictation sessions
+- **Multilingual** — interface and transcription in Japanese, English, and Spanish; additional languages for transcription
+- **Auto-update** — checks GitHub Releases on launch and updates itself
 
 ## How it works
 
 ```text
-Microphone → local preprocessing → Tauri/Rust → Groq API → text insertion
+Microphone → local preprocessing (VAD + ffmpeg) → Rust → Groq API → clipboard paste
 ```
 
-Audio is sent directly from the native desktop backend to `https://api.groq.com`. WhisperType does not operate a proxy, store transcription history in a cloud database, or receive your API key.
+1. You hold the global shortcut; the app records from your microphone.
+2. On release, the audio is decoded locally, checked for speech with WebRTC VAD, and re-encoded to a compact format.
+3. The processed audio is sent directly from the Rust backend to `https://api.groq.com` (OpenAI-compatible `/audio/transcriptions`).
+4. The transcribed text is inserted into the active application via the clipboard.
+
+WhisperType does not operate a proxy, store transcription history in a cloud database, or receive your API key.
+
+## Privacy & security
+
+- Your Groq API key stays on your device and is sent only to Groq for authentication.
+- Audio is processed temporarily and is not retained by WhisperType.
+- Transcribed text is **not written to logs** (only status codes and sizes are logged) and is stored only in memory during a session.
+- No telemetry, analytics, or crash reporting.
+- Groq's handling of requests is governed by Groq's current terms and privacy policy; you are responsible for your own API key and usage.
+
+> BYOK model: because this is a desktop application, a determined user can inspect the installed binary. Never use a key that grants access to an organization or account you do not control.
 
 ## Installation
 
 ### Windows
 
 1. Download the latest installer (`WhisperType_*_x64-setup.exe`) from the [Releases](https://github.com/masakitiphone-lab/WhisperType/releases) page.
-2. Run the installer. No administrator rights are required.
-3. Installers are unsigned, so Windows SmartScreen may show a warning. Click **More info → Run anyway** to continue.
+2. Run the installer — no administrator rights required.
+3. Installers are unsigned, so Windows SmartScreen may show a warning. Click **More info → Run anyway**.
 
 ### macOS
 
 1. Download the DMG for your Mac (`x86_64` for Intel, `aarch64` for Apple Silicon) from the [Releases](https://github.com/masakitiphone-lab/WhisperType/releases) page.
-2. Open the DMG and drag WhisperType into the Applications folder.
-3. Installers are unsigned, so macOS Gatekeeper may block the first launch. Right-click the app and select **Open**, then confirm **Open** in the dialog.
+2. Open the DMG and drag WhisperType into Applications.
+3. macOS Gatekeeper may block the first launch (unsigned build). Right-click the app, choose **Open**, and confirm.
 
-> Installers are unsigned because WhisperType is a free open-source project. If you prefer, you can build from source (see [Development](#development)) instead.
+> Alternatively, build from source — see [Development](#development).
 
 ## Getting started
 
-1. **Add your Groq API key.** On first launch, the onboarding will ask for it. You can also add or change it later in **Settings → Groq API key**. Get a key at <https://console.groq.com/keys>. The key is stored only in your OS keychain and is sent directly to Groq — never to WhisperType.
-2. **Check the shortcut.** The default shortcut is `Ctrl+Alt` (Windows) / `Cmd+Alt` (macOS). Hold it, speak, and release it to stop. You can change it in **Settings → Shortcut key**.
-3. **Start dictating.** While holding the shortcut, speak into the microphone. The transcription is inserted into the active application when you release the shortcut.
+1. **Add your Groq API key** — the onboarding asks for it on first launch. You can change it anytime under **Settings → Groq API key**. Get a key at <https://console.groq.com/keys>. It is stored only in your OS credential store.
+2. **Check the shortcut** — the default is `Ctrl+Alt` (Windows) / `Cmd+Alt` (macOS). Hold it, speak, and release to stop. Change it under **Settings → Shortcut key**.
+3. **Dictate** — while holding the shortcut, speak. The transcription is inserted when you release it.
+
+> **Tip**: with a modifier-only shortcut like `Ctrl+Alt`, you can bind a mouse button as an alternative trigger.
 
 ## Usage
 
-### Recording
+### Recording & overlay
 
-- Hold the global shortcut to start recording; release it to stop and insert the text.
-- The floating overlay shows a live waveform and the transcription progress.
-- Tip: with a modifier-only shortcut like `Ctrl+Alt`, you can even use a mouse button as an alternative trigger.
+- Hold the global shortcut to start recording; release to stop and insert the text.
+- The overlay capsule shows a live waveform while recording and a progress spinner while transcribing.
+- During long dictation sessions, each finished segment is appended to a **transcription preview** above the capsule, so you can monitor what has been captured without looking at the target application.
+- The overlay is click-through: it never blocks clicks on the windows beneath it.
 
 ### Settings
 
 | Setting | Description |
 | --- | --- |
-| Groq API key | Your `gsk_...` key. Stored in the OS keychain. |
+| Groq API key | Your `gsk_...` key, stored in the OS credential store. |
 | Shortcut key | The global hotkey that starts/stops recording. |
 | Input microphone | Choose which microphone to use. |
 | Transcription language | Spoken language or **Auto**. |
 | Model | **Turbo** (faster) or **Full** (more accurate). |
 | Overlay | Show/hide the floating overlay and waveform during recording. |
-| Sounds | Play start/success sounds and adjust their volume. |
+| Sounds | Play start/success sounds and adjust volume. |
 | Auto insert | Automatically insert the transcription on release. |
 | Clipboard paste | Insert via clipboard instead of simulated key events (more reliable in some apps). |
 | Prompt | Optional hints for names, mixed languages, or writing style. |
-
-### Languages
-
-Interface and transcription support Japanese, English, and Spanish (plus French, German, Italian, Portuguese, Chinese, and Korean for transcription). Change the interface language during onboarding or on the main screen.
 
 ## Development
 
 ### Requirements
 
-- Node.js 20 or later
-- pnpm
+- Node.js 20+
+- [pnpm](https://pnpm.io)
 - Rust stable toolchain
 - Tauri v2 platform prerequisites ([docs](https://v2.tauri.app/start/prerequisites/))
-- A Groq API key
+- A Groq API key for testing
+- On macOS: ffmpeg via Homebrew (`brew install ffmpeg`)
 
 ### Setup
 
@@ -85,68 +131,44 @@ pnpm install
 pnpm tauri dev
 ```
 
-On first launch, onboarding will ask for your Groq API key (`gsk_...`). The key is stored in the OS keychain; it is not written to `.env`, localStorage, or the repository.
+### Verification
+
+```bash
+pnpm exec tsc --noEmit   # frontend typecheck
+pnpm build               # frontend typecheck + bundle
+cargo check              # Rust (run inside src-tauri/)
+```
 
 ### Production builds
 
 ```bash
-pnpm build
 pnpm tauri build --bundles nsis   # Windows
 pnpm tauri build --bundles dmg    # macOS
 ```
 
-No build-time environment variables or secrets are required. `.env.example` is intentionally empty apart from documentation.
+No build-time secrets are required. `.env.example` exists only as documentation and is intentionally empty.
 
-### Releases
+### Releases & auto-update
 
-Pushing a version tag builds installers for Windows (NSIS), macOS Intel (DMG), and macOS Apple Silicon (DMG) on GitHub Actions and attaches them to a draft Release:
-
-```bash
-git tag v0.1.0
-git push origin v0.1.0
-```
-
-Open the draft in the [Releases](https://github.com/masakitiphone-lab/WhisperType/releases) page, review it, and publish.
-
-### Auto-update
-
-The app ships with [tauri-plugin-updater](https://v2.tauri.app/plugin/updater/) wired up: on launch it checks
-`https://github.com/masakitiphone-lab/WhisperType/releases/latest/download/latest.json`, downloads an available
-update, and restarts automatically.
-
-The update signing keypair lives **outside this repository** at `~/.tauri/whispertype-updater.key` (private) and
-`~/.tauri/whispertype-updater.key.pub` (public). The public key is embedded in `src-tauri/tauri.conf.json`.
-
-For auto-updates to actually work, release artifacts must be signed and a `latest.json` manifest published. With the
-private key available, run `pnpm tauri build` with the signing environment variables set, then publish the artifacts
-plus `latest.json` to the GitHub Release:
+Pushing a version tag builds installers for Windows (NSIS), macOS Intel (DMG), and macOS Apple Silicon (DMG) on GitHub Actions:
 
 ```bash
-# Build and sign (NSIS on Windows, DMG on macOS)
-export TAURI_SIGNING_PRIVATE_KEY_PATH="$HOME/.tauri/whispertype-updater.key"
-pnpm tauri build --bundles nsis   # Windows
-pnpm tauri build --bundles dmg    # macOS
-
-# Generate the update manifest (from the bundle output directory)
-pnpm tauri signer sign -k "$HOME/.tauri/whispertype-updater.key" \
-  src-tauri/target/release/bundle/nsis/*-setup.exe
-# Upload the installer(s), their .sig files, and a latest.json pointing at them
-# (see https://v2.tauri.app/plugin/updater/ for the manifest format)
+git tag v0.2.0
+git push origin v0.2.0
 ```
 
-> **Important**: keep the private key secret. Losing it means updates can no longer be signed. To run signing in CI,
-> add the key as a GitHub secret (e.g. `TAURI_SIGNING_PRIVATE_KEY_PATH` or `TAURI_SIGNING_PRIVATE_KEY`) and pass it to
-> the build step in `.github/workflows/release.yml`.
+The app ships with `tauri-plugin-updater` wired up: on launch it checks the GitHub Releases `latest.json`, downloads an update, and restarts. The update signing keypair lives **outside the repository** at `~/.tauri/whispertype-updater.key` (private) and `.pub` (public). For updates to flow, release artifacts must be signed and a `latest.json` manifest published — see [AGENTS.md](AGENTS.md#auto-update) for details, and keep the private key secret.
 
-## Privacy and security
+## Contributing
 
-- Your Groq API key remains on your device and is sent only to Groq for API authentication.
-- Audio is processed temporarily for transcription and is not intentionally retained by WhisperType.
-- Groq's handling of requests is governed by Groq's current terms and privacy policy.
-- Anyone using this app is responsible for their own Groq account, API usage, and API-key rotation.
+Contributions are welcome! Please keep changes focused and consistent with the existing style:
 
-Because this is a desktop application, a determined user can inspect the installed binary. BYOK is therefore the intended model: never use a key that grants access to an organization or account you do not control.
+1. Fork the repository and create a feature branch.
+2. Make your change and verify it with `pnpm build` and `cargo check`.
+3. Open a pull request describing the motivation and the change.
+
+Note: the project intentionally has no backend — do not introduce server-side components (Supabase, Cloudflare Workers, etc.).
 
 ## License
 
-See [LICENSE](LICENSE).
+[MIT](LICENSE) © 2026 Studio Mirai

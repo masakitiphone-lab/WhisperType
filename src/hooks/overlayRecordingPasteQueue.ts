@@ -1,7 +1,7 @@
 import type { MutableRefObject } from "react";
 import { invoke } from "@tauri-apps/api/core";
 
-const MAX_PENDING_PASTE_LENGTH = 5000;
+export const MAX_PENDING_PASTE_LENGTH = 5000;
 
 export class PasteFlushError extends Error {
   text: string;

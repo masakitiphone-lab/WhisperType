@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { AnimatePresence } from "motion/react";
 import { CapsuleShell } from "@/components/overlay/CapsuleShell";
+import { TranscriptionPreviewPanel } from "@/components/overlay/TranscriptionPreviewPanel";
 import { TransitioningOverlayIcon } from "@/components/overlay/TransitioningOverlayIcon";
 import { WaveformStrip } from "@/components/overlay/WaveformStrip";
 import { useRecordingController } from "@/hooks/RecordingControllerContext";
@@ -15,6 +16,7 @@ import {
   getCapsuleAnimationWidth,
   getCapsuleWidthProgress,
   getIconTravelX,
+  getOverlayPreviewStageHeight,
   getPhaseAnimationProgress,
   getWaveformPhaseOpacity,
 } from "@/lib/overlayLayout";
@@ -31,6 +33,7 @@ export default function OverlayPage() {
     capsuleMounted,
     spinnerPhase,
     transcriptionProgress,
+    transcriptionPreviewText,
     overlayScale,
     stageWidth,
     stageHeight,
@@ -64,6 +67,8 @@ export default function OverlayPage() {
   const capsuleRenderWidth = Math.max(capsuleAnimatedWidth, capsuleContentBandWidth);
   const iconTravelX = getIconTravelX(capsuleAnimationProgress, stageWidth, capsuleContentBandWidth, iconBallSize);
   const waveformOpacity = getWaveformPhaseOpacity(capsulePhase, now - capsulePhaseStartedAt);
+  const hasPreviewText = transcriptionPreviewText.trim().length > 0;
+  const effectiveStageHeight = hasPreviewText ? getOverlayPreviewStageHeight() : stageHeight;
 
   useEffect(() => {
     if (!isOverlayVisible) {
@@ -71,12 +76,12 @@ export default function OverlayPage() {
     }
     void invoke("resize_overlay_window_command", {
       width: stageWidth * overlayScale,
-      height: stageHeight * overlayScale,
+      height: effectiveStageHeight * overlayScale,
       position: uiSettingsRef.current.overlayPosition,
       offsetX: uiSettingsRef.current.overlayOffsetX,
       offsetY: uiSettingsRef.current.overlayOffsetY,
     }).catch((err) => console.error("resize_overlay_window_command failed:", err));
-  }, [isOverlayVisible, overlayScale, stageHeight, stageWidth]);
+  }, [effectiveStageHeight, isOverlayVisible, overlayScale, stageWidth]);
 
   return (
     <div
@@ -99,7 +104,7 @@ export default function OverlayPage() {
           left: "50%",
           top: "50%",
           width: `${stageWidth}px`,
-          height: `${stageHeight}px`,
+          height: `${effectiveStageHeight}px`,
           transform: `translate(-50%, -50%) scale(${overlayScale})`,
           transformOrigin: "center center",
           background: "transparent",
@@ -162,6 +167,13 @@ export default function OverlayPage() {
               />
             ) : null}
           </AnimatePresence>
+
+          {isOverlayVisible && hasPreviewText ? (
+            <TranscriptionPreviewPanel
+              text={transcriptionPreviewText}
+              reduceMotion={!!shouldReduceMotion}
+            />
+          ) : null}
         </div>
       </div>
     </div>

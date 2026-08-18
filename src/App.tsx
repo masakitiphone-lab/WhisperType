@@ -6,6 +6,8 @@ import { readAppSettings, writeAppSettings } from "@/lib/appSettings";
 import OnboardingModal from "@/components/OnboardingModal";
 import TutorialPracticeModal from "@/components/TutorialPracticeModal";
 import { invoke } from "@tauri-apps/api/core";
+import { check } from "@tauri-apps/plugin-updater";
+import { relaunch } from "@tauri-apps/plugin-process";
 import { normalizeHotkeyForDisplay, normalizeHotkeyForNative } from "@/lib/hotkeys";
 import { setGroqApiKey } from "@/services/transcription";
 
@@ -23,6 +25,31 @@ export default function App() {
     if (!settings.tutorialCompleted && settings.onboardingCompleted) {
       setPendingPracticeOpen(true);
     }
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const update = await check();
+        if (!update || cancelled) {
+          return;
+        }
+        await update.downloadAndInstall();
+        if (cancelled) {
+          return;
+        }
+        // Give the installer a moment to finish before restarting the app.
+        window.setTimeout(() => {
+          void relaunch().catch((error) => console.warn("Relaunch after update failed:", error));
+        }, 1500);
+      } catch (error) {
+        console.warn("Update check failed:", error);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {

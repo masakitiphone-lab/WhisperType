@@ -108,6 +108,36 @@ git push origin v0.1.0
 
 Open the draft in the [Releases](https://github.com/masakitiphone-lab/WhisperType/releases) page, review it, and publish.
 
+### Auto-update
+
+The app ships with [tauri-plugin-updater](https://v2.tauri.app/plugin/updater/) wired up: on launch it checks
+`https://github.com/masakitiphone-lab/WhisperType/releases/latest/download/latest.json`, downloads an available
+update, and restarts automatically.
+
+The update signing keypair lives **outside this repository** at `~/.tauri/whispertype-updater.key` (private) and
+`~/.tauri/whispertype-updater.key.pub` (public). The public key is embedded in `src-tauri/tauri.conf.json`.
+
+For auto-updates to actually work, release artifacts must be signed and a `latest.json` manifest published. With the
+private key available, run `pnpm tauri build` with the signing environment variables set, then publish the artifacts
+plus `latest.json` to the GitHub Release:
+
+```bash
+# Build and sign (NSIS on Windows, DMG on macOS)
+export TAURI_SIGNING_PRIVATE_KEY_PATH="$HOME/.tauri/whispertype-updater.key"
+pnpm tauri build --bundles nsis   # Windows
+pnpm tauri build --bundles dmg    # macOS
+
+# Generate the update manifest (from the bundle output directory)
+pnpm tauri signer sign -k "$HOME/.tauri/whispertype-updater.key" \
+  src-tauri/target/release/bundle/nsis/*-setup.exe
+# Upload the installer(s), their .sig files, and a latest.json pointing at them
+# (see https://v2.tauri.app/plugin/updater/ for the manifest format)
+```
+
+> **Important**: keep the private key secret. Losing it means updates can no longer be signed. To run signing in CI,
+> add the key as a GitHub secret (e.g. `TAURI_SIGNING_PRIVATE_KEY_PATH` or `TAURI_SIGNING_PRIVATE_KEY`) and pass it to
+> the build step in `.github/workflows/release.yml`.
+
 ## Privacy and security
 
 - Your Groq API key remains on your device and is sent only to Groq for API authentication.

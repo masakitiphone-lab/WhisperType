@@ -37,7 +37,8 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   hotkey: "Ctrl+Alt",
   language: "auto",
   model: "whisper-large-v3-turbo",
-  prompt: "",
+  prompt:
+    "今日は朝から天気が良く、清々しい一日が始まりました。午前中はカフェでゆっくりと読書をし、午後からは友人との待ち合わせを予定しています。最近は、日常の中にある小さな幸せを大切にしながら、一歩ずつ着実に進むことを心がけています。こうした穏やかな時間が、日々の活力につながっていると感じます。",
   overlayScale: 1,
   overlayPosition: "bottom",
   overlayOffsetX: 0,

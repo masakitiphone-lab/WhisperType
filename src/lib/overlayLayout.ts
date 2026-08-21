@@ -21,8 +21,6 @@ export const OVERLAY_WINDOW_BUFFER_X = 18;
 export const OVERLAY_WINDOW_BUFFER_Y = 12;
 export const OVERLAY_NOTICE_BUFFER_X = 14;
 export const OVERLAY_NOTICE_BUFFER_Y = 12;
-export const PREVIEW_MAX_HEIGHT = 60;
-export const PREVIEW_GAP = 8;
 export const CAPSULE_COLLAPSED_WIDTH = BASE_HEIGHT;
 export const CAPSULE_EXPANDED_WIDTH = 176;
 export const CAPSULE_BODY_WIDTH = 304;
@@ -49,10 +47,6 @@ export function getOverlayCapsuleStageWidth() {
 
 export function getOverlayCapsuleStageHeight() {
   return BASE_HEIGHT + OVERLAY_WINDOW_BUFFER_Y * 2;
-}
-
-export function getOverlayPreviewStageHeight() {
-  return BASE_HEIGHT + (PREVIEW_MAX_HEIGHT + PREVIEW_GAP) * 2;
 }
 
 export function getOverlayNoticeStageWidth(noticeWidth: number) {

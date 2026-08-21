@@ -7,6 +7,7 @@ import { normalizeHotkeyForDisplay, normalizeHotkeyForNative } from "@/lib/hotke
 import { DEFAULT_HOTKEY, getUiCopy, type HotkeyBackendInfo } from "@/pages/settingsPageData";
 import { MainPageSettingsSection } from "@/pages/MainPageSettingsSection";
 import { MainPageHomeSection } from "@/pages/MainPageHomeSection";
+import { MainPageHistorySection } from "@/pages/MainPageHistorySection";
 import { LANGUAGE_OPTIONS, MODEL_OPTIONS } from "@/pages/settingsPageData";
 import { requestPreferredAudioStream } from "@/lib/audioCapture";
 
@@ -27,7 +28,15 @@ export default function MainPage({ appLocale, onAppLocaleChange }: { appLocale: 
   const ui = getUiCopy(appLocale);
 
   useEffect(() => { void invoke<HotkeyBackendInfo>("get_hotkey_backend_info").then(setBackend).catch(() => {}); }, []);
-  useEffect(() => { writeAppSettings({ ...settings, hotkey }); }, [settings, hotkey]);
+  useEffect(() => {
+    const stored = readAppSettings();
+    writeAppSettings({
+      ...settings,
+      hotkey,
+      onboardingCompleted: stored.onboardingCompleted,
+      tutorialCompleted: stored.tutorialCompleted,
+    });
+  }, [settings, hotkey]);
 
   useEffect(() => {
     const checkMicrophone = async () => {
@@ -83,6 +92,7 @@ export default function MainPage({ appLocale, onAppLocaleChange }: { appLocale: 
       onMicTestStop={() => {}}
       onPreferredAudioInputDeviceChange={(deviceId) => setSettings((current) => ({ ...current, preferredAudioInputDeviceId: deviceId }))}
     />
+    <MainPageHistorySection appLocale={appLocale} />
     <div className="mt-6 flex gap-2 text-sm">
       <button className="rounded-lg border px-3 py-2" onClick={() => onAppLocaleChange("ja")}>日本語</button>
       <button className="rounded-lg border px-3 py-2" onClick={() => onAppLocaleChange("en")}>English</button>

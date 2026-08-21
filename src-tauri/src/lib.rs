@@ -8,6 +8,7 @@ mod secure_storage;
 mod tray;
 mod text_input;
 mod accessibility;
+mod history;
 
 use tauri::{AppHandle, Manager, UserAttentionType, WebviewUrl, WebviewWindowBuilder};
 use reqwest::multipart;
@@ -512,6 +513,10 @@ pub fn run() {
             secure_storage_get,
             secure_storage_set,
             secure_storage_delete,
+            history::get_transcription_history,
+            history::add_transcription_history_entry,
+            history::delete_transcription_history_entry,
+            history::clear_transcription_history,
             accessibility::get_accessibility_status,
             accessibility::request_accessibility_permission_command,
         ])

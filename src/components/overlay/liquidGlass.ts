@@ -16,8 +16,8 @@ export function getLiquidGlassBaseStyle(tone: LiquidGlassTone, reduceMotion: boo
   }
 
   return {
-    border: "1px solid rgba(255,255,255,0.24)",
-    background: "rgba(255,255,255,0.25)",
+    border: "1px solid rgba(255,255,255,0.34)",
+    background: "rgba(255,255,255,0.74)",
     backdropFilter: reduceMotion ? "blur(4px)" : "blur(5px)",
     WebkitBackdropFilter: reduceMotion ? "blur(4px)" : "blur(5px)",
     boxShadow:
@@ -33,6 +33,6 @@ export function getLiquidGlassTintStyle(tone: LiquidGlassTone) {
   }
 
   return {
-    background: "rgba(232,232,232,0.22)",
+    background: "rgba(255,255,255,0.30)",
   } as const;
 }

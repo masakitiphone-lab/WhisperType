@@ -17,12 +17,12 @@ import { createEmptyWaveformLevels, startRecordingWaveformAnimation, type Active
 import { assertRecordingHasSpeech, buildTranscriptionOverlayNotice, stopRecordingAndCreateBlob } from "@/hooks/overlayRecordingTranscription";
 import { attachOverlayRecordingEventListeners } from "@/hooks/overlayRecordingEvents";
 import { PasteFlushError, flushPastedTranscriptions, queueTranscriptionPaste } from "@/hooks/overlayRecordingPasteQueue";
+import { addTranscriptionHistoryEntry } from "@/lib/transcriptionHistory";
 import {
   CAPSULE_COLLAPSE_DURATION,
   CAPSULE_EXPAND_DURATION,
   getOverlayCapsuleStageHeight,
   getOverlayCapsuleStageWidth,
-  getOverlayPreviewStageHeight,
 } from "@/lib/overlayLayout";
 import { readOverlayLayoutPreferences, resizeOverlayWindowForPreferences, type OverlayLayoutPreferences } from "@/lib/overlayLayoutPreferences";
 
@@ -32,8 +32,6 @@ export function useOverlayRecordingController() {
   const [capsulePhase, setCapsulePhase] = useState<CapsulePhase>("idle");
   const [capsuleMounted, setCapsuleMounted] = useState(false);
   const [spinnerPhase, setSpinnerPhase] = useState<"hidden" | "closing" | "visible">("hidden");
-  const [transcriptionPreviewText, setTranscriptionPreviewText] = useState("");
-  const transcriptionPreviewTextRef = useRef("");
   const overlayPresentationVersion = 0;
   const [isOverlayVisible, setIsOverlayVisible] = useState(false);
   const [capsulePhaseStartedAt, setCapsulePhaseStartedAt] = useState(() => Date.now());
@@ -71,11 +69,6 @@ export function useOverlayRecordingController() {
   const shouldReduceMotion = !!useReducedMotion();
   overlayNoticeRef.current = overlayNotice;
   isOverlayVisibleRef.current = isOverlayVisible;
-  transcriptionPreviewTextRef.current = transcriptionPreviewText;
-  const getCurrentStageHeight = () =>
-    transcriptionPreviewTextRef.current.trim()
-      ? getOverlayPreviewStageHeight()
-      : stageHeightRef.current;
   const overlayGenerationIsCurrent = (generation: number) => generation === overlayGenerationRef.current;
   const updateState = (nextState: typeof recordingState) => {
     stateRef.current = nextState;
@@ -168,7 +161,7 @@ export function useOverlayRecordingController() {
         }
         await resizeOverlayWindowForPreferences(
           stageWidthRef.current,
-          getCurrentStageHeight(),
+          stageHeightRef.current,
           uiSettingsRef.current,
         ).catch((err) => console.error("resize_overlay_window_command failed:", err));
       });
@@ -254,7 +247,7 @@ export function useOverlayRecordingController() {
       }
       await resizeOverlayWindowForPreferences(
         stageWidth,
-        getCurrentStageHeight(),
+        stageHeightRef.current,
         uiSettingsRef.current,
       ).catch((err) => console.error("resize_overlay_window_command failed:", err));
       if (!overlayGenerationIsCurrent(generation)) {
@@ -293,8 +286,8 @@ export function useOverlayRecordingController() {
         await invoke("start_transcription");
         const text = await transcribeAudio(transcribableBlob);
         transcriptionProgress.complete();
+        void addTranscriptionHistoryEntry(text).catch((err) => console.warn("Failed to save transcription history:", err));
         queueTranscriptionPaste(pendingPasteTextRef, text);
-        setTranscriptionPreviewText((prev) => (prev ? `${prev} ${text}` : text));
         void invoke("emit_transcription_finished").catch(() => {});
         void prefetchTranscriptionReadiness().catch((err) => {
           console.warn("Post-transcription prefetch failed:", err);
@@ -330,7 +323,6 @@ export function useOverlayRecordingController() {
       }
       if (!currentRecordingRef.current && !isStartingRef.current && pendingTranscriptionsRef.current === 0 && pendingPasteTextRef.current.trim()) {
         await flushPastedTranscriptions(pendingPasteTextRef).then(() => {
-          setTranscriptionPreviewText("");
           uiSettingsRef.current = readAppSettings();
           if (stopSoundRef.current) stopSoundRef.current.volume = uiSettingsRef.current.soundVolume;
           if (uiSettingsRef.current.playStopSound) void stopSoundRef.current?.play().catch((err) => console.error("Success sound play failed:", err));
@@ -384,9 +376,6 @@ export function useOverlayRecordingController() {
       setOverlayNotice(null);
       setSpinnerPhase("hidden");
       transcriptionProgress.reset();
-      if (pendingTranscriptionsRef.current === 0) {
-        setTranscriptionPreviewText("");
-      }
       setCapsuleMounted(true);
       updateCapsulePhase("expanding");
       updateState("recording");
@@ -503,7 +492,6 @@ export function useOverlayRecordingController() {
     capsuleMounted,
     spinnerPhase,
     transcriptionProgress: transcriptionProgress.progress,
-    transcriptionPreviewText,
     overlayScale,
     setOverlayNotice,
     clearOverlayNotice,

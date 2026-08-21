@@ -45,6 +45,7 @@ export async function flushPastedTranscriptions(pendingPasteTextRef: MutableRefO
         useClipboardPaste: true,
       });
       if (pasteResult === "paste_sent_target_not_selected") {
+        pendingPasteTextRef.current = "";
         throw new PasteFlushError("paste_target_not_selected", combinedText);
       }
       if (index < chunks.length - 1) {
